@@ -1,0 +1,272 @@
+:root {
+  --bg: #16181d;
+  --bg-raised: #1d2027;
+  --bg-hover: #262a33;
+  --border: #2c313b;
+  --text: #e6e8ec;
+  --text-dim: #8b929f;
+  --accent: #5b9dff;
+  --accent-soft: rgba(91, 157, 255, 0.16);
+  --star: #f2c14e;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --bg-raised: #f6f7f9;
+    --bg-hover: #eceef2;
+    --border: #e0e3e9;
+    --text: #1a1d23;
+    --text-dim: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.1);
+    --star: #d99e0b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 372px;
+  max-height: 560px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+/* ------------------------------------------------------------------ search */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.bar__icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex: none;
+}
+
+.bar__icon svg,
+.row__star svg {
+  display: block;
+}
+
+#search {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  padding: 2px 0;
+}
+
+#search::placeholder {
+  color: var(--text-dim);
+}
+
+#search::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* -------------------------------------------------------------------- list */
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0 8px;
+  outline: none;
+}
+
+.group {
+  padding: 10px 14px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 46px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px 5px 10px;
+  cursor: pointer;
+  border: 0;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.row:hover,
+.row.is-active {
+  background: var(--bg-hover);
+}
+
+.row:focus {
+  outline: none;
+}
+
+.row:focus-visible,
+.row__star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.row.is-active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/*
+ * The device frame is drawn as a silhouette rather than as an <img>: the PNG's
+ * alpha is used as a CSS mask and filled with a theme colour. Dark line-art
+ * would otherwise disappear against the dark popup, and recolouring the image
+ * with filters would ruin the coloured bodies (rose gold, blue titanium).
+ * Masking also gives a hollow screen for free, since the cutout is transparent.
+ */
+.row__thumb {
+  width: 46px;
+  height: 38px;
+  flex: none;
+  background-color: var(--text-dim);
+  -webkit-mask-image: var(--thumb);
+  mask-image: var(--thumb);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: background-color 0.1s;
+}
+
+.row:hover .row__thumb,
+.row.is-active .row__thumb {
+  background-color: var(--accent);
+}
+
+/* Saved sets use an icon rather than a device silhouette. */
+.row__thumb--set {
+  display: grid;
+  place-items: center;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+  color: var(--text-dim);
+}
+
+.row:hover .row__thumb--set,
+.row.is-active .row__thumb--set {
+  background: none;
+  color: var(--accent);
+}
+
+.row__thumb--set svg {
+  display: block;
+}
+
+.row__body {
+  min-width: 0;
+}
+
+.row__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row__name mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.row__meta {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row__star {
+  border: 0;
+  background: transparent;
+  color: var(--border);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 0;
+  border-radius: 4px;
+  flex: none;
+}
+
+.row__star:hover {
+  color: var(--text-dim);
+  background: var(--accent-soft);
+}
+
+.row__star.is-on {
+  color: var(--star);
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.foot {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.foot__label {
+  flex: none;
+}
+
+.foot__url {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}

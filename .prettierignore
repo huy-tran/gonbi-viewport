@@ -1,0 +1,8 @@
+# Generated - rewritten by tools/, so formatting them achieves nothing.
+src/data/icons.js
+src/data/frame-geometry.js
+
+tools/node_modules/
+tools/browsers/
+tools/shots/
+assets/

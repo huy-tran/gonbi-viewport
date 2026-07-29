@@ -1,0 +1,36 @@
+# Ready for when this is put under version control.
+#
+# Only the fast suite runs here: smoke.mjs drives a real Chrome against live
+# sites, which is too flaky and too slow for CI. Run `npm run test:e2e` locally
+# before anything that matters.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+
+      - name: Install tooling
+        working-directory: tools
+        run: npm ci
+
+      # Structural checks, unit tests, character hygiene and lint.
+      - name: Test
+        working-directory: tools
+        run: npm test
+
+      # The extension must load in Chrome; a bad manifest fails here.
+      - name: Validate manifest is parseable JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"

@@ -1,0 +1,24 @@
+{
+  "name": "gonbi-viewport-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Asset pipeline and tests for the Gonbi Viewport extension. Nothing here is shipped: the extension itself has no dependencies and no build step.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node validate.mjs && node test-units.mjs && node test-fuzzy.mjs && node check-chars.mjs && node lint.mjs",
+    "test:e2e": "node smoke.mjs",
+    "test:all": "npm test && npm run test:e2e",
+    "lint": "node lint.mjs",
+    "fix": "prettier --write \"../src/**/*.{js,html,css}\" \"./*.mjs\" \"./*.js\" && node check-chars.mjs --fix",
+    "build": "npm run build:frames && npm run build:icons",
+    "build:frames": "node build-frames.mjs",
+    "build:icons": "node build-hugeicons.mjs && node build-icons.mjs",
+    "browser": "npx @puppeteer/browsers install chrome@stable --path ./browsers"
+  },
+  "devDependencies": {
+    "@hugeicons/core-free-icons": "^4.2.3",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.6",
+    "puppeteer-core": "^24.43.1"
+  }
+}

@@ -1,0 +1,6 @@
+# Tooling, not the extension.
+tools/node_modules/
+tools/browsers/
+
+# Test output.
+tools/shots/

@@ -1,0 +1,1046 @@
+:root {
+  --bg: #101216;
+  --bg-raised: #1a1d23;
+  --bg-stage: #0b0c0f;
+  --border: #2a2f38;
+  --text: #e6e8ec;
+  --text-dim: #8b929f;
+  --accent: #5b9dff;
+  --accent-soft: rgba(91, 157, 255, 0.16);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f4f7;
+    --bg-raised: #ffffff;
+    --bg-stage: #e8ebf0;
+    --border: #d9dee6;
+    --text: #1a1d23;
+    --text-dim: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.1);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+/* ----------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.toolbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.toolbar__url {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.toolbar__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--border);
+  flex: none;
+}
+
+.toolbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+#url {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+#url:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.btn {
+  height: 30px;
+  min-width: 30px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.btn--icon.is-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.btn:disabled:hover {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: transparent;
+}
+
+.select {
+  height: 30px;
+  max-width: 360px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.select--narrow {
+  width: 84px;
+  max-width: 84px;
+}
+
+.select--panel {
+  width: 168px;
+  max-width: 168px;
+}
+
+/* Custom viewport size fields. */
+.size {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  flex: none;
+}
+
+.size__field {
+  width: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  outline: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.size__field::-webkit-inner-spin-button,
+.size__field::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.size__x {
+  color: var(--text-dim);
+}
+
+.size.is-custom {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+#sizeReset[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------- breakpoints */
+
+.breakpoints {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-x: auto;
+}
+
+.breakpoints[hidden] {
+  display: none;
+}
+
+.breakpoints__label {
+  flex: none;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.breakpoints__list {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chip {
+  height: 21px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* The band the current width sits in. */
+.chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.breakpoints__note {
+  margin-left: auto;
+  flex: none;
+  white-space: nowrap;
+}
+
+/*
+ * A native select is only as wide as the box we give it, and clipping the
+ * selected device name is worse than spending the space. This hidden span
+ * measures the selected option so the control can be sized to fit it exactly -
+ * see fitDeviceSelect() in viewer.js.
+ */
+.select__sizer {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre;
+  font: inherit;
+}
+
+.select__sizer--pane {
+  font-size: 11px;
+}
+
+/* A toolbar button that carries a word as well as its icon. */
+.btn--label {
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn--label span {
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------- stage */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-stage);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--border) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
+.stage.has-failure {
+  place-items: center;
+}
+
+/* Devices sit in a row so several can be compared side by side. */
+.panes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 28px;
+}
+
+.panes[hidden] {
+  display: none;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.pane__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A single device is already named in the status bar. */
+.panes:not(.is-compare) .pane__head {
+  display: none;
+}
+
+/*
+ * Reads as the pane's label until you approach it, then behaves like the picker
+ * it is - swapping one device of a comparison without disturbing the others.
+ */
+.pane__device {
+  height: 20px;
+  max-width: 240px;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pane__device:hover {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+
+.pane__device:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pane__size {
+  color: var(--text-dim);
+}
+
+.pane__close {
+  height: 20px;
+  min-width: 20px;
+}
+
+.pane__close svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pane__close[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------- add tile -- */
+
+.addtile {
+  position: relative;
+  align-self: center;
+  flex: none;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  width: 150px;
+  min-height: 190px;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.addtile:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.addtile__icon svg {
+  display: block;
+}
+
+.addtile__label {
+  font-size: 12px;
+}
+
+/* Stretched over the tile so a click anywhere opens the native dropdown. */
+.addtile__select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+}
+
+.addtile__select:focus-visible + .addtile__label,
+.addtile:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+/*
+ * `sizer` reserves the on-screen footprint at the current zoom, so the stage
+ * scrolls correctly; `frame` keeps its true pixel dimensions and is scaled.
+ */
+.sizer {
+  position: relative;
+  flex: none;
+}
+
+.frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.45));
+}
+
+/*
+ * The art sits *above* the iframe. Its screen area is a transparent cutout, so
+ * the page shows through it while the bezel, the rounded screen corners and the
+ * notch / dynamic island stay drawn on top - exactly as on the real device.
+ * The iframe is a plain rectangle covering the cutout's bounding box; the art
+ * is what gives it rounded corners. pointer-events:none keeps clicks flowing
+ * through to the page.
+ */
+.frame__art {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: 0 0;
+}
+
+.frame.is-bare .frame__art {
+  display: none;
+}
+
+/*
+ * Full-page capture only. The iframe's corners sit under the bezel's rounded
+ * screen cutout, so every stitched slice contributed a sliver of bezel at its
+ * top edge - a row of dark marks repeating down the finished image. Hiding the
+ * art and squaring the clip leaves nothing but page. Geometry is untouched, so
+ * the measured crop rectangle stays valid.
+ */
+.frame.is-capturing .frame__art {
+  display: none;
+}
+
+.frame.is-capturing .frame__viewport {
+  border-radius: 0 !important;
+}
+
+.frame.is-bare {
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.35));
+}
+
+/*
+ * One clip to rule them all: the cutout's rounded rectangle. The iframe and the
+ * simulated bars live inside, so neither can escape past the bezel.
+ */
+.frame__viewport {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  background: #fff;
+}
+
+.frame__screen {
+  position: absolute;
+  left: 0;
+  border: 0;
+  display: block;
+  background: #fff;
+}
+
+.frame__chrome {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.frame__chrome:first-child {
+  top: 0;
+}
+
+.frame__chrome:last-child {
+  bottom: 0;
+}
+
+/* ------------------------------------------------------- simulated device UI */
+
+.bar {
+  height: var(--h);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  font:
+    600 14px/1 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #12141a;
+  background: #fff;
+  user-select: none;
+}
+
+.bar svg {
+  display: block;
+}
+
+.bar__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.bar__glyphs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+/*
+ * iOS puts the clock and the glyphs either side of the island, vertically
+ * centred on it. The frame draws the island centred in this bar, so centring
+ * here lines the two up without either needing to know the other's numbers.
+ */
+.bar--ios-status {
+  padding: 0 22px 0 30px;
+}
+
+.bar--android-status {
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bar--home,
+.bar--nav {
+  justify-content: center;
+  background: #fff;
+}
+
+.bar--home .bar__pill {
+  width: 36%;
+  height: 5px;
+  border-radius: 3px;
+  background: #12141a;
+  margin-top: 6px;
+}
+
+.bar--nav .bar__pill {
+  width: 28%;
+  height: 4px;
+  border-radius: 2px;
+  background: #12141a;
+  opacity: 0.75;
+}
+
+.bar--browser {
+  gap: 12px;
+  padding: 0 12px;
+  background: #e6e8ec;
+  border-bottom: 1px solid #d2d6dd;
+}
+
+.bar__lights {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.bar__lights i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #c3c7ce;
+}
+
+.bar__lights.is-mac i:nth-child(1) {
+  background: #ff5f57;
+}
+
+.bar__lights.is-mac i:nth-child(2) {
+  background: #febc2e;
+}
+
+.bar__lights.is-mac i:nth-child(3) {
+  background: #28c840;
+}
+
+.bar__omnibox {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 13px;
+  background: #fff;
+  color: #4a5160;
+  font:
+    400 12px/1 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  max-width: 40ch;
+  text-align: center;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.sizer[hidden],
+.hint[hidden] {
+  display: none;
+}
+
+/* Shown when a site refuses to be framed by means headers cannot fix. */
+.failure {
+  position: absolute;
+  max-width: 42ch;
+  padding: 22px 26px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+.failure__icon {
+  display: inline-grid;
+  place-items: center;
+  color: #e0a355;
+}
+
+.failure__title {
+  margin: 6px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.failure__body {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.failure__action {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------- resize grip */
+
+/*
+ * Sits at the bottom-right of the pane's footprint. Dragging it switches to a
+ * custom viewport size, which is the most direct way to hunt for the width at
+ * which a layout breaks.
+ */
+.grip {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 16px;
+  height: 16px;
+  border-right: 3px solid var(--text-dim);
+  border-bottom: 3px solid var(--text-dim);
+  border-bottom-right-radius: 4px;
+  opacity: 0.5;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.grip:hover,
+.grip.is-dragging {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+/* Only the first pane is resizable - the others follow their own devices. */
+.pane:not(:first-child) .grip {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- panels --- */
+
+.panel {
+  position: fixed;
+  right: 12px;
+  top: 48px;
+  z-index: 20;
+  width: 300px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.32);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel__hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #e0a355;
+}
+
+.panel__hint.is-ok {
+  color: var(--text-dim);
+}
+
+.panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.panel__row--check {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.panel__row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.panel--errors {
+  width: 380px;
+  bottom: 34px;
+  top: auto;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.panel--errors ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.panel--errors li {
+  margin-bottom: 6px;
+  word-break: break-word;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------- status bar errors */
+
+.statusbar__errors,
+.statusbar__audit {
+  border: 0;
+  background: transparent;
+  color: #e0a355;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.statusbar__errors[hidden],
+.statusbar__audit[hidden] {
+  display: none;
+}
+
+.statusbar__audit.is-clean {
+  color: #3fa66a;
+}
+
+/* ---------------------------------------------------------------- audit --- */
+
+.panel--audit {
+  width: 420px;
+  bottom: 34px;
+  top: auto;
+  right: 12px;
+  font-size: 11px;
+}
+
+.audit__note {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.audit__group {
+  margin-bottom: 12px;
+}
+
+.audit__group h3 {
+  margin: 0 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.audit__group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audit__group li {
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: default;
+}
+
+.audit__group li:hover {
+  background: var(--bg);
+}
+
+.audit__label {
+  display: block;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.audit__detail {
+  display: block;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.audit__pane + .audit__pane {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.audit__pane h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.panel__btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.panel__btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Sweep results: one row per declared breakpoint. */
+.audit__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit__table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 0 6px 4px;
+}
+
+.audit__table td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.audit__table tr:hover td {
+  background: var(--bg);
+}
+
+.audit__table tr.is-bad td:nth-child(2) {
+  color: #e0a355;
+  font-weight: 600;
+}
+
+.audit__table tr.is-good td:nth-child(2) {
+  color: #3fa66a;
+}
+
+/* ----------------------------------------------------------------- help --- */
+
+.panel--help {
+  width: 340px;
+  top: 50%;
+  right: 50%;
+  transform: translate(50%, -50%);
+}
+
+.help__list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 12px;
+  margin: 0 0 12px;
+  font-size: 11px;
+}
+
+.help__list dt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  white-space: nowrap;
+  justify-self: start;
+}
+
+.help__list dd {
+  margin: 0;
+  color: var(--text-dim);
+  align-self: center;
+}
+
+.btn.is-recording {
+  color: #ff5f57;
+  background: rgba(255, 95, 87, 0.14);
+}
+
+/* --------------------------------------------------------------- statusbar */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  padding: 5px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar__note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar__note.is-warn {
+  color: #e0a355;
+}

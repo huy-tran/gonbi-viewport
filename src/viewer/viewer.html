@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Gonbi Viewport</title>
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="toolbar__nav">
+        <button type="button" id="back" class="btn btn--icon" title="Back (Alt+Left)" aria-label="Back" data-icon="back"></button>
+        <button type="button" id="forward" class="btn btn--icon" title="Forward (Alt+Right)" aria-label="Forward" data-icon="forward"></button>
+        <button type="button" id="reload" class="btn btn--icon" title="Reload (R)" aria-label="Reload" data-icon="refresh"></button>
+      </div>
+
+      <form id="urlForm" class="toolbar__url">
+        <input id="url" type="text" placeholder="Enter a URL…" spellcheck="false" autocomplete="off" aria-label="URL" />
+      </form>
+
+      <div class="toolbar__controls">
+        <select id="device" class="select" aria-label="Device"></select>
+        <span id="deviceSizer" class="select__sizer" aria-hidden="true"></span>
+
+        <select id="browser" class="select select--narrow" aria-label="Browser"></select>
+
+        <button id="compareToggle" class="btn btn--label" title="Comparison mode: show several devices side by side (C)" aria-pressed="false" data-icon="compare">
+          <span>Compare</span>
+        </button>
+        <button id="saveSet" class="btn btn--icon" title="Save these devices as a set" aria-label="Save device set" data-icon="star"></button>
+
+        <span class="toolbar__sep" role="separator"></span>
+
+        <label class="size" title="Custom viewport size - drag the handle on the frame, or type here">
+          <input id="sizeW" class="size__field" type="number" min="120" max="4000" step="1" aria-label="Custom width" />
+          <span class="size__x">×</span>
+          <input id="sizeH" class="size__field" type="number" min="120" max="4000" step="1" aria-label="Custom height" />
+        </label>
+        <button id="sizeReset" class="btn btn--icon" title="Back to the device's own size" aria-label="Reset size" data-icon="close" hidden></button>
+
+        <button id="rotate" class="btn btn--icon" title="Rotate (Shift+R)" aria-label="Rotate" data-icon="rotate"></button>
+
+        <select id="zoom" class="select select--narrow" aria-label="Zoom">
+          <option value="fit">Fit</option>
+          <option value="0.5">50%</option>
+          <option value="0.75">75%</option>
+          <option value="1">100%</option>
+          <option value="1.25">125%</option>
+          <option value="1.5">150%</option>
+        </select>
+
+        <button id="frameToggle" class="btn btn--icon is-on" title="Show device frame (F)" aria-label="Toggle device frame" aria-pressed="true" data-icon="device"></button>
+        <button id="uiToggle" class="btn btn--icon is-on" title="Show device UI: status bar, home indicator, browser bar (U)" aria-label="Toggle device UI" aria-pressed="true" data-icon="statusbar"></button>
+        <button id="syncToggle" class="btn btn--icon" title="Sync scrolling across devices (Y)" aria-label="Sync scrolling" aria-pressed="false" data-icon="syncScroll" hidden></button>
+
+        <span class="toolbar__sep" role="separator"></span>
+
+        <button id="accurateToggle" class="btn btn--icon" title="Accurate mode: true pixel ratio, dark mode, vision and network emulation. Chrome shows a debugging banner while this is on." aria-label="Accurate mode" aria-pressed="false" data-icon="accurate"></button>
+        <button id="emulationToggle" class="btn btn--icon" title="Emulation options (E)" aria-label="Emulation options" aria-expanded="false" data-icon="settings"></button>
+
+        <span class="toolbar__sep" role="separator"></span>
+
+        <button id="shot" class="btn btn--icon" title="Screenshot (S) - hold Shift for the full page" aria-label="Screenshot" data-icon="camera"></button>
+        <button id="record" class="btn btn--icon" title="Record video (V)" aria-label="Record video" aria-pressed="false" data-icon="record"></button>
+        <button id="popout" class="btn btn--icon" title="Open in a normal tab" aria-label="Open in a normal tab" data-icon="external"></button>
+      </div>
+    </header>
+
+    <!-- Populated once the framed page reports its own media queries. -->
+    <div id="breakpoints" class="breakpoints" hidden>
+      <span class="breakpoints__label">Breakpoints</span>
+      <div id="breakpointList" class="breakpoints__list"></div>
+      <span id="breakpointNote" class="breakpoints__note"></span>
+    </div>
+
+    <main id="stage" class="stage">
+      <div id="panes" class="panes"></div>
+      <p id="hint" class="hint" hidden></p>
+    </main>
+
+    <!-- Measures pane-select text; matches .pane__head's font, not the toolbar's. -->
+    <span id="paneSizer" class="select__sizer select__sizer--pane" aria-hidden="true"></span>
+
+    <template id="addTileTemplate">
+      <!--
+        Sits after the last pane in comparison mode. The select is stretched over
+        the whole tile at zero opacity so a click anywhere opens the native
+        dropdown, while staying a real focusable control for the keyboard.
+      -->
+      <div class="addtile">
+        <span class="addtile__icon" data-icon="add" data-icon-size="22"></span>
+        <span class="addtile__label">Add device</span>
+        <select class="addtile__select" aria-label="Add a device to compare"></select>
+      </div>
+    </template>
+
+    <footer class="statusbar">
+      <span id="spec" class="statusbar__spec"></span>
+      <button type="button" id="auditBadge" class="statusbar__audit" hidden aria-expanded="false"></button>
+      <button type="button" id="errorBadge" class="statusbar__errors" hidden aria-expanded="false"></button>
+      <span id="note" class="statusbar__note"></span>
+    </footer>
+
+    <!-- Responsive problems a screenshot will not tell you about. -->
+    <div id="auditPanel" class="panel panel--audit" hidden role="dialog" aria-label="Responsive issues"></div>
+
+    <!-- Built from the SHORTCUTS table in viewer.js, so it cannot go stale. -->
+    <div id="helpPanel" class="panel panel--help" hidden role="dialog" aria-label="Keyboard shortcuts"></div>
+
+    <!-- Emulation options. Everything here needs accurate mode except nothing. -->
+    <div id="emulationPanel" class="panel" hidden role="dialog" aria-label="Emulation options">
+      <p class="panel__hint" id="emulationHint">These need accurate mode, which is currently off.</p>
+
+      <label class="panel__row">
+        <span>Colour scheme</span>
+        <select id="colorScheme" class="select select--panel">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+
+      <label class="panel__row">
+        <span>Vision</span>
+        <select id="vision" class="select select--panel">
+          <option value="none">Normal</option>
+          <option value="blurredVision">Blurred vision</option>
+          <option value="reducedContrast">Reduced contrast</option>
+          <option value="achromatopsia">Achromatopsia (no colour)</option>
+          <option value="deuteranopia">Deuteranopia (red/green)</option>
+          <option value="protanopia">Protanopia (red/green)</option>
+          <option value="tritanopia">Tritanopia (blue/yellow)</option>
+        </select>
+      </label>
+
+      <label class="panel__row panel__row--check">
+        <input id="reducedMotion" type="checkbox" />
+        <span>Prefers reduced motion</span>
+      </label>
+
+      <label class="panel__row panel__row--check">
+        <input id="forcedColors" type="checkbox" />
+        <span>Forced colours (high contrast)</span>
+      </label>
+
+      <label class="panel__row">
+        <span>Network</span>
+        <select id="throttle" class="select select--panel">
+          <option value="none">No throttle</option>
+          <option value="4g">Fast 4G</option>
+          <option value="3g">Slow 3G</option>
+          <option value="offline">Offline</option>
+        </select>
+      </label>
+
+      <label class="panel__row">
+        <span>Location</span>
+        <select id="geo" class="select select--panel">
+          <option value="none">Not overridden</option>
+          <option value="london">London</option>
+          <option value="new-york">New York</option>
+          <option value="tokyo">Tokyo</option>
+          <option value="sydney">Sydney</option>
+          <option value="sao-paulo">São Paulo</option>
+        </select>
+      </label>
+
+      <label class="panel__row">
+        <span>Locale</span>
+        <select id="locale" class="select select--panel">
+          <option value="">Not overridden</option>
+          <option value="en-US">en-US</option>
+          <option value="en-GB">en-GB</option>
+          <option value="de-DE">de-DE</option>
+          <option value="fr-FR">fr-FR</option>
+          <option value="ja-JP">ja-JP</option>
+          <option value="ar-EG">ar-EG</option>
+          <option value="vi-VN">vi-VN</option>
+        </select>
+      </label>
+
+      <label class="panel__row">
+        <span>Time zone</span>
+        <select id="timezone" class="select select--panel">
+          <option value="">Not overridden</option>
+          <option value="UTC">UTC</option>
+          <option value="Europe/London">Europe/London</option>
+          <option value="America/New_York">America/New_York</option>
+          <option value="Asia/Tokyo">Asia/Tokyo</option>
+          <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh</option>
+          <option value="Australia/Sydney">Australia/Sydney</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="errorPanel" class="panel panel--errors" hidden role="dialog" aria-label="Page errors"></div>
+
+    <template id="paneTemplate">
+      <div class="pane">
+        <div class="pane__head">
+          <!-- The label is the device picker, so a pane can be swapped in place. -->
+          <select class="pane__device" aria-label="Device for this pane"></select>
+          <span class="pane__size"></span>
+          <button class="pane__close btn btn--icon" title="Remove this device" aria-label="Remove this device" data-icon="close"></button>
+        </div>
+        <div class="sizer">
+          <div class="frame">
+            <!--
+              The viewport box is clipped to the cutout's rounded rectangle, so
+              everything inside it - the simulated bars and the iframe - is
+              contained by that one clip and can never spill past the bezel.
+            -->
+            <div class="frame__viewport">
+              <div class="frame__chrome frame__chrome--top"></div>
+              <!--
+                The sandbox exists for one reason: it withholds
+                allow-top-navigation, so a framed page cannot navigate the viewer
+                tab out from under you. Chrome warns that allow-scripts plus
+                allow-same-origin lets content escape its sandbox - that warning
+                is about same-origin content, and everything framed here is
+                cross-origin to the extension. Dropping allow-same-origin would
+                give the page an opaque origin and break cookies and
+                localStorage, i.e. most real sites.
+              -->
+              <iframe
+                class="frame__screen"
+                title="Device viewport"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-storage-access-by-user-activation allow-presentation allow-orientation-lock allow-pointer-lock"
+                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; clipboard-read; clipboard-write"
+              ></iframe>
+              <div class="frame__chrome frame__chrome--bottom"></div>
+            </div>
+            <img class="frame__art" alt="" />
+          </div>
+          <span class="grip" title="Drag to set a custom viewport size" aria-hidden="true"></span>
+        </div>
+      </div>
+    </template>
+
+    <script type="module" src="viewer.js"></script>
+  </body>
+</html>
