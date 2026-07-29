@@ -650,8 +650,10 @@ window.addEventListener('message', (event) => {
       if (!syncScroll) break;
       for (const pane of panes) {
         if (pane.screen.contentWindow === event.source) continue;
+        // `path` names an inner scroll container when the page itself is not
+        // what moved; the other panes look up the same node.
         pane.screen.contentWindow?.postMessage(
-          { __gonbi: 'scrollTo', x: data.x, y: data.y },
+          { __gonbi: 'scrollTo', x: data.x, y: data.y, path: data.path ?? null },
           '*',
         );
       }

@@ -596,6 +596,41 @@ try {
     scrolls.join(', '),
   );
 
+  /*
+   * An app shell scrolls an inner overflow container, not the page. Those
+   * scroll events do not bubble, so a window listener never sees them and the
+   * panes silently stopped syncing. The same markup is planted in every pane -
+   * they all show one page - and the driving pane's container is scrolled.
+   */
+  const shell = () =>
+    Promise.all(
+      frames.map((f) =>
+        f.evaluate(() => {
+          document.body.innerHTML =
+            '<div id="scroller" style="height:100vh;overflow-y:auto">' +
+            '<div style="height:6000px"></div></div>';
+          document.documentElement.style.overflow = 'hidden';
+          document.body.style.margin = '0';
+        }),
+      ),
+    );
+  await shell();
+  await wait(500);
+  await frames[0].evaluate(() =>
+    document.getElementById('scroller').scrollTo(0, 900),
+  );
+  await wait(1200);
+  const innerScrolls = await Promise.all(
+    frames.map((f) =>
+      f.evaluate(() => Math.round(document.getElementById('scroller').scrollTop)),
+    ),
+  );
+  check(
+    'scroll syncs when the page scrolls an inner container',
+    innerScrolls.length === 3 && innerScrolls.every((y) => y === 900),
+    innerScrolls.join(', '),
+  );
+
   // -------------------------------------------------------- custom viewport --
   frames = await open(
     `device=iphone-15-pro&w=900&h=700&${site('https://example.com')}`,

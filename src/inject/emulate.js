@@ -188,7 +188,47 @@ export function emulateInFrame({ devices, syncScroll }) {
     }
   };
 
-  let echo = false;
+  /**
+   * Scrolls we applied ourselves must not be reported back as if the reader had
+   * made them, or two panes ping-pong. A rAF flag is not enough: `scrollTo` on a
+   * page with `scroll-behavior: smooth` animates over many frames, and every
+   * frame of that animation would look like a fresh scroll. A short deadline
+   * covers the whole settle. It only ever gags a pane that was just driven from
+   * elsewhere - the pane under the pointer is never sent a scrollTo, so its own
+   * reporting is untouched.
+   */
+  const ECHO_MS = 150;
+  let echoUntil = 0;
+
+  const isDocScroller = (node) =>
+    node === document || node === document.documentElement || node === document.body;
+
+  /**
+   * A selector for a scrollable element, so the other panes can find the same
+   * node. Every pane shows the same page, so a structural path resolves - and
+   * an id short-circuits it, which is what app shells usually give us.
+   */
+  const pathOf = (node) => {
+    const parts = [];
+    let cursor = node;
+    while (cursor && cursor.nodeType === 1 && !isDocScroller(cursor)) {
+      if (cursor.id) {
+        parts.unshift(`#${CSS.escape(cursor.id)}`);
+        return parts.join('>');
+      }
+      let part = cursor.tagName.toLowerCase();
+      const parent = cursor.parentElement;
+      if (parent) {
+        const sameTag = [...parent.children].filter(
+          (c) => c.tagName === cursor.tagName,
+        );
+        if (sameTag.length > 1) part += `:nth-of-type(${sameTag.indexOf(cursor) + 1})`;
+      }
+      parts.unshift(part);
+      cursor = cursor.parentElement;
+    }
+    return parts.length ? parts.join('>') : null;
+  };
 
   // Command handlers are always installed: full-page capture drives the scroll
   // even when devices are not being compared.
@@ -197,12 +237,15 @@ export function emulateInFrame({ devices, syncScroll }) {
     if (!data || typeof data !== 'object') return;
 
     if (data.__gonbi === 'scrollTo') {
-      echo = true;
-      window.scrollTo(data.x ?? 0, data.y ?? 0);
-      // Clear on the next frame so our own scroll event does not bounce back.
-      requestAnimationFrame(() => {
-        echo = false;
-      });
+      // A path means an inner scroller. If this pane cannot find it the page
+      // differs here; scrolling the window instead would jump somewhere the
+      // reader never asked for, so do nothing.
+      const target = data.path ? document.querySelector(data.path) : window;
+      if (!target) return;
+      echoUntil = performance.now() + ECHO_MS;
+      // 'instant' overrides the page's own `scroll-behavior: smooth`, which
+      // would otherwise animate and leave the panes chasing each other.
+      target.scrollTo({ left: data.x ?? 0, top: data.y ?? 0, behavior: 'instant' });
     } else if (data.__gonbi === 'measure') {
       const doc = document.documentElement;
       post({
@@ -272,18 +315,37 @@ export function emulateInFrame({ devices, syncScroll }) {
   });
 
   if (syncScroll) {
-    let queued = false;
-    window.addEventListener(
+    let latest = null;
+    let scheduled = false;
+    /*
+     * Capture on the document, not a bubble listener on the window: scroll
+     * events from an element do not bubble, so an app shell that scrolls an
+     * inner `overflow:auto` container - rather than the page itself - would
+     * never reach a window listener and would silently never sync.
+     */
+    document.addEventListener(
       'scroll',
-      () => {
-        if (echo || queued) return;
-        queued = true;
+      (event) => {
+        if (performance.now() < echoUntil) return;
+        const node = event.target;
+        const inner = !isDocScroller(node);
+        const path = inner ? pathOf(node) : null;
+        // An unnameable inner scroller cannot be found in the other panes.
+        if (inner && !path) return;
+        // Keep only the newest position; one post per frame is plenty.
+        latest = inner
+          ? { x: node.scrollLeft, y: node.scrollTop, path }
+          : { x: window.scrollX, y: window.scrollY, path: null };
+        if (scheduled) return;
+        scheduled = true;
         requestAnimationFrame(() => {
-          queued = false;
-          post({ __gonbi: 'scroll', x: window.scrollX, y: window.scrollY });
+          scheduled = false;
+          const send = latest;
+          latest = null;
+          if (send) post({ __gonbi: 'scroll', ...send });
         });
       },
-      { passive: true },
+      { passive: true, capture: true },
     );
   }
 
