@@ -1218,20 +1218,32 @@ function toggleHelp() {
   el.helpPanel.append(note);
 }
 
+/**
+ * Every dismissible panel, paired with the control whose state it reflects.
+ * Closing a panel without clearing its control leaves the control looking
+ * pressed over a panel that is no longer there.
+ */
+const PANELS = [
+  [el.helpPanel, null],
+  [el.auditPanel, el.auditBadge],
+  [el.emulationPanel, el.emulationToggle],
+  [el.errorPanel, el.errorBadge],
+];
+
+function closePanels() {
+  for (const [panel, owner] of PANELS) {
+    panel.hidden = true;
+    owner?.setAttribute('aria-expanded', 'false');
+  }
+}
+
 document.addEventListener('keydown', (event) => {
   if (event.metaKey || event.ctrlKey) return;
   // Typing in a field must never trigger a shortcut.
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
 
   if (event.key === 'Escape') {
-    for (const panel of [
-      el.helpPanel,
-      el.auditPanel,
-      el.emulationPanel,
-      el.errorPanel,
-    ]) {
-      panel.hidden = true;
-    }
+    closePanels();
     return;
   }
 
