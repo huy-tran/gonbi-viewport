@@ -36,13 +36,41 @@ const RULES_PER_TAB = 3;
 const SLOT_KEY = 'ruleSlots';
 const VIEWERS_KEY = 'activeViewers';
 
-async function readSlots() {
-  const { [SLOT_KEY]: slots } = await chrome.storage.session.get(SLOT_KEY);
-  return slots ?? {};
+/**
+ * Rule slots, and the viewer tabs with what each is emulating.
+ *
+ * Session storage is the source of truth, because the service worker is torn
+ * down between events and the navigation listener needs this after a restart.
+ * It is read back once per worker and then kept in memory: re-reading it per
+ * message put a handful of sequential storage round trips in front of the
+ * framed page's first request, and the navigation listener pays it again for
+ * every frame the page contains.
+ */
+let statePromise = null;
+
+function state() {
+  statePromise ??= chrome.storage.session
+    .get([SLOT_KEY, VIEWERS_KEY])
+    .then((stored) => ({
+      slots: stored[SLOT_KEY] ?? {},
+      viewers: stored[VIEWERS_KEY] ?? {},
+    }))
+    .catch((error) => {
+      // A cached rejection would sink every later call for this worker's life.
+      statePromise = null;
+      throw error;
+    });
+  return statePromise;
 }
 
+async function persist() {
+  const { slots, viewers } = await state();
+  await chrome.storage.session.set({ [SLOT_KEY]: slots, [VIEWERS_KEY]: viewers });
+}
+
+/** Allocates on demand; the caller persists, since it is mutating too. */
 async function ruleIdsForTab(tabId, { create = false } = {}) {
-  const slots = await readSlots();
+  const { slots } = await state();
   if (slots[tabId]) return slots[tabId];
   if (!create) return [];
 
@@ -52,37 +80,30 @@ async function ruleIdsForTab(tabId, { create = false } = {}) {
     if (!used.has(candidate)) ids.push(candidate);
   }
   slots[tabId] = ids;
-  await chrome.storage.session.set({ [SLOT_KEY]: slots });
   return ids;
 }
 
 async function releaseRuleIds(tabId) {
-  const slots = await readSlots();
+  const { slots } = await state();
   delete slots[tabId];
-  await chrome.storage.session.set({ [SLOT_KEY]: slots });
+  await persist();
 }
 
-/**
- * Viewer tabs and what each is emulating. Kept in session storage rather than a
- * Map because the service worker is torn down between events and the navigation
- * listener needs this after a restart.
- */
 async function readViewers() {
-  const { [VIEWERS_KEY]: viewers } = await chrome.storage.session.get(VIEWERS_KEY);
-  return viewers ?? {};
+  return (await state()).viewers;
 }
 
 async function rememberViewer(tabId, patch) {
-  const viewers = await readViewers();
+  const { viewers } = await state();
   viewers[tabId] = { ...viewers[tabId], ...patch };
-  await chrome.storage.session.set({ [VIEWERS_KEY]: viewers });
+  await persist();
   return viewers[tabId];
 }
 
 async function forgetViewer(tabId) {
-  const viewers = await readViewers();
+  const { viewers } = await state();
   delete viewers[tabId];
-  await chrome.storage.session.set({ [VIEWERS_KEY]: viewers });
+  await persist();
 }
 
 /** Every sub-resource type a framed page can request, minus the top document. */
@@ -121,10 +142,23 @@ function paneDevices(viewer) {
 }
 
 /**
+ * What each tab's rules were last built from.
+ *
+ * updateSessionRules is the slowest thing between a load starting and its first
+ * request going out, and the rules only depend on the device and the browser -
+ * so re-installing an identical set is pure latency. Memory-only on purpose: a
+ * restarted worker forgets and re-applies, which is the safe direction to err.
+ */
+const ruleSignatures = new Map();
+
+/**
  * Install the header rules for `tabId` so the framed page loads and thinks it
  * is running on `device` in `browserId`. Replaces this tab's previous rules.
  */
 async function applyDeviceRules(tabId, device, browserId) {
+  const signature = `${device.id}|${browserId ?? ''}`;
+  if (ruleSignatures.get(tabId) === signature) return;
+
   const ids = await ruleIdsForTab(tabId, { create: true });
   const [frameRuleId, uaRuleId, hintsRuleId] = ids;
   const ua = uaFor(device, browserId);
@@ -189,9 +223,13 @@ async function applyDeviceRules(tabId, device, browserId) {
     removeRuleIds: ids,
     addRules,
   });
+  // Only once the rules are actually in, so a failed update is retried.
+  ruleSignatures.set(tabId, signature);
+  await persist();
 }
 
 async function clearDeviceRules(tabId) {
+  ruleSignatures.delete(tabId);
   try {
     const ids = await ruleIdsForTab(tabId);
     if (ids.length) {

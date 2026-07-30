@@ -473,6 +473,46 @@ function syncAddress() {
 
 let failureTimer;
 
+/**
+ * Arming the tab is a service-worker round trip that nothing can overlap: the
+ * header rules have to be installed before the frame asks for anything, or the
+ * site answers with desktop markup and X-Frame-Options intact.
+ *
+ * It only has to happen when its inputs change, though. A reload, a new URL or
+ * a back/forward is served by the rules already in place, so those loads skip
+ * the trip entirely and go straight to the network - which is most of them.
+ */
+let armedFor = null;
+let arming = null;
+
+const armSignature = () =>
+  JSON.stringify([devices.map((d) => d.id), browserId, syncScroll]);
+
+/** Returns the in-flight arm, or null when the tab is already armed for this. */
+function armTab() {
+  const signature = armSignature();
+  if (armedFor === signature) return null;
+  if (arming?.signature === signature) return arming.promise;
+
+  const promise = chrome.runtime
+    .sendMessage({
+      type: 'armTab',
+      deviceId: primary().id,
+      deviceIds: devices.map((d) => d.id),
+      browserId,
+      syncScroll,
+    })
+    .catch((error) => ({ ok: false, error: String(error?.message ?? error) }))
+    .then((response) => {
+      if (response?.ok) armedFor = signature;
+      if (arming?.signature === signature) arming = null;
+      return response;
+    });
+
+  arming = { signature, promise };
+  return promise;
+}
+
 async function load(url, { force = false, fromHistory = false } = {}) {
   const sameUrl = url === currentUrl;
   currentUrl = url;
@@ -495,23 +535,23 @@ async function load(url, { force = false, fromHistory = false } = {}) {
   el.panes.hidden = false;
   el.hint.hidden = true;
 
-  // Switching device or rotating reloads the same page; remember where the
-  // reader was so they are not thrown back to the top every time.
-  if (force && !fromHistory && sameUrl && panes[0]) {
-    const before = await measure(panes[0]);
-    pendingScroll = before?.scrollY || 0;
-  } else {
-    pendingScroll = 0;
-  }
+  /*
+   * Both of these have to settle before the frames are pointed anywhere, so
+   * they run together rather than one after the other.
+   *
+   * Reloading the same page remembers where the reader was, so they are not
+   * thrown back to the top every time - but that answer comes from the framed
+   * page, and a page that is gone, busy or was never injected into will not
+   * answer at all. A short deadline gives up on the scroll position rather than
+   * holding the whole load hostage to it.
+   */
+  const arm = armTab();
+  const restore =
+    force && !fromHistory && sameUrl && panes[0] ? measure(panes[0], 400) : null;
+  const [armed, before] = await Promise.all([arm, restore]);
+  pendingScroll = before?.scrollY || 0;
 
-  const armed = await chrome.runtime.sendMessage({
-    type: 'armTab',
-    deviceId: primary().id,
-    deviceIds: devices.map((d) => d.id),
-    browserId,
-    syncScroll,
-  });
-  if (!armed?.ok) {
+  if (arm && !armed?.ok) {
     // Without the header rules the page loads as desktop, or not at all - say
     // so rather than silently showing a misleading result.
     flash(`Emulation not armed: ${armed?.error ?? 'no response'}`, true);
@@ -630,7 +670,7 @@ function request(pane, kind, timeout = 4000) {
   });
 }
 
-const measure = (pane) => request(pane, 'measure', 2000);
+const measure = (pane, timeout = 2000) => request(pane, 'measure', timeout);
 
 window.addEventListener('message', (event) => {
   const data = event.data;
@@ -877,13 +917,8 @@ async function swapDevice(index, deviceId) {
   panes[index].root.replaceWith(fresh.root);
   panes[index] = fresh;
 
-  await chrome.runtime.sendMessage({
-    type: 'armTab',
-    deviceId: primary().id,
-    deviceIds: devices.map((d) => d.id),
-    browserId,
-    syncScroll,
-  });
+  // The pane list changed, so this one really does have to wait for the rules.
+  await armTab();
   if (currentUrl) fresh.screen.src = currentUrl;
 
   updateControls();
@@ -1268,9 +1303,10 @@ window.addEventListener('resize', () => {
 
 (async () => {
   hydrateIcons();
-  ownTabId = (await chrome.tabs.getCurrent())?.id ?? null;
+  // Independent lookups; serialising them just adds a round trip to startup.
+  const [tab, saved] = await Promise.all([chrome.tabs.getCurrent(), getState()]);
+  ownTabId = tab?.id ?? null;
 
-  const saved = await getState();
   zoomMode = saved.zoom ?? 'fit';
   showFrame = saved.showFrame ?? true;
   syncScroll = saved.syncScroll ?? false;
@@ -1291,7 +1327,11 @@ window.addEventListener('resize', () => {
   paintToggle(el.compareToggle, comparing);
 
   buildDeviceSelect();
+  // buildBrowserSelect can correct browserId, so the arm has to follow it - but
+  // it need not follow the rest. Starting it here overlaps the round trip with
+  // building the panes instead of queueing behind them.
   buildBrowserSelect();
+  armTab();
   buildPanes();
   updateControls();
   updateNote();

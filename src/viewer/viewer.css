@@ -861,6 +861,11 @@ body {
   color: #3fa66a;
 }
 
+/* Nothing checked yet, so it is an offer rather than a result. */
+.statusbar__audit.is-idle {
+  color: var(--text-dim);
+}
+
 /* ---------------------------------------------------------------- audit --- */
 
 .panel--audit {

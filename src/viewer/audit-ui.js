@@ -77,8 +77,21 @@ export function createAudit(ctx) {
 
   const count = () => results.reduce((sum, r) => sum + (r.result?.total ?? 0), 0);
 
+  /**
+   * Automatic checks only happen while the panel is open.
+   *
+   * An audit reads a bounding rect for every element in the page, which is a
+   * forced layout of the whole document from inside the framed site - and it
+   * was landing about a second after every navigation, in the middle of that
+   * site's own startup. Worth spending when someone is reading the findings,
+   * not otherwise; opening the panel checks on the spot.
+   */
   const schedule = (delay = 1200) => {
     clearTimeout(timer);
+    if (ctx.panel.hidden) {
+      render();
+      return;
+    }
     timer = setTimeout(run, delay);
   };
 
@@ -185,11 +198,23 @@ export function createAudit(ctx) {
 
   function render() {
     const total = count();
-    ctx.badge.hidden = results.length === 0;
-    ctx.badge.textContent = total
-      ? `${total} issue${total === 1 ? '' : 's'}${stale ? ' (stale)' : ''}`
-      : `No issues${stale ? ' (stale)' : ''}`;
-    ctx.badge.classList.toggle('is-clean', total === 0);
+    const checked = results.length > 0;
+
+    /*
+     * With nothing checked yet the badge is the way in, so it offers the check
+     * rather than hiding - it only disappears when there is no page to check.
+     */
+    ctx.badge.hidden = !checked && !ctx.url();
+    ctx.badge.textContent = !checked
+      ? 'Check page'
+      : total
+        ? `${total} issue${total === 1 ? '' : 's'}${stale ? ' (stale)' : ''}`
+        : `No issues${stale ? ' (stale)' : ''}`;
+    ctx.badge.title = checked
+      ? 'Responsive issues (I)'
+      : 'Check this page for responsive and accessibility issues (I)';
+    ctx.badge.classList.toggle('is-clean', checked && total === 0);
+    ctx.badge.classList.toggle('is-idle', !checked);
 
     if (ctx.panel.hidden) return;
     ctx.panel.replaceChildren();
