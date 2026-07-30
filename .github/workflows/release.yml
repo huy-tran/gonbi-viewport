@@ -1,0 +1,83 @@
+# Cutting a release is a tag push:
+#
+#   git tag v1.1.0 && git push origin v1.1.0
+#
+# That publishes a GitHub release carrying the loadable extension as a zip.
+# Nothing is published from a branch push, so an ordinary merge never releases.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# gh release create writes to the repository, which the default token cannot
+# do without this.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+
+      - name: Install tooling
+        working-directory: tools
+        run: npm ci
+
+      # CI runs this too, but CI failing does not stop a release, and a tag is
+      # the one push where shipping something broken is expensive to undo.
+      # The e2e suite stays out: it drives real Chrome against live sites.
+      - name: Test
+        working-directory: tools
+        run: npm test
+
+      # The zip names a version, so a tag that disagrees with the manifest
+      # would ship an artifact contradicting the release it hangs off. A
+      # prerelease suffix is allowed and compared on its numeric part only,
+      # since a Chrome manifest version cannot carry one.
+      - name: Check the tag agrees with the manifest
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          core="${tag%%-*}"
+          manifest="$(node -p "require('./manifest.json').version")"
+          if [ "$core" != "$manifest" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} carries version ${core}, manifest.json says ${manifest}"
+            exit 1
+          fi
+          echo "releasing ${GITHUB_REF_NAME} (manifest ${manifest})"
+
+      # Only what Chrome loads. tools/ is the asset pipeline and the tests,
+      # docs/ is screenshots for the README; neither belongs in the extension.
+      # manifest.json must sit at the root of the zip for "Load unpacked" and
+      # for a Web Store upload to accept it.
+      - name: Package the extension
+        run: |
+          zip -r "gonbi-viewport-${GITHUB_REF_NAME}.zip" \
+            manifest.json src assets LICENSE THIRD-PARTY-NOTICES.md \
+            -x '*/.DS_Store'
+          unzip -l "gonbi-viewport-${GITHUB_REF_NAME}.zip"
+
+      # gh ships on the runner, so this needs no third-party action. A tag with
+      # a suffix (v1.1.0-beta.1) is marked as a prerelease rather than becoming
+      # the version people are offered by default.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease=--prerelease ;;
+            *) prerelease= ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            $prerelease \
+            "gonbi-viewport-${GITHUB_REF_NAME}.zip"
