@@ -27,8 +27,6 @@ const UA = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
   tizen:
     'Mozilla/5.0 (SMART-TV; LINUX; Tizen 7.0) AppleWebKit/537.36 (KHTML, like Gecko) 94.0.4606.31/7.0 TV Safari/537.36',
-  watch:
-    'Mozilla/5.0 (Apple Watch; CPU WatchOS 10_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/10.0 Mobile/15E148 Safari/604.1',
 };
 
 /** Group order drives the section order in the popup. */
@@ -37,7 +35,6 @@ export const CATEGORIES = [
   { id: 'tablet', label: 'Tablet' },
   { id: 'laptop', label: 'Laptop' },
   { id: 'desktop', label: 'Desktop' },
-  { id: 'wearable', label: 'Wearable' },
 ];
 
 export const DEVICES = [
@@ -779,22 +776,6 @@ export const DEVICES = [
     touch: false,
     landscape: true,
     ua: UA.tizen,
-  },
-
-  // ------------------------------------------------------------- wearables --
-  // Named without the brand, which is prefixed at display time - otherwise this
-  // reads "Apple Apple Watch".
-  {
-    id: 'apple-watch-6',
-    name: 'Watch Series 6 (40mm)',
-    brand: 'Apple',
-    year: 2020,
-    category: 'wearable',
-    width: 162,
-    height: 197,
-    dpr: 2,
-    touch: true,
-    ua: UA.watch,
   },
 ];
 

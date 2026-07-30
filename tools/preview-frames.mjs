@@ -22,7 +22,6 @@ const picks = process.argv.slice(2).length
       'macbook-air-13',
       'imac-24',
       'samsung-tv-55',
-      'apple-watch-6',
       'galaxy-fold',
     ];
 
@@ -48,7 +47,10 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
 const page = await browser.newPage();
-await page.setViewport({ width: 1500, height: 900, deviceScaleFactor: 1 });
+// Short on purpose: a fullPage shot grows to the content but never shrinks below
+// the viewport, so a tall one would pad the sheet with dead space whenever the
+// picks happen to fit in fewer rows.
+await page.setViewport({ width: 1500, height: 200, deviceScaleFactor: 1 });
 await page.setContent(html, { waitUntil: 'load' });
 await page.screenshot({
   path: path.join(ROOT, 'tools', 'shots', 'frames-preview.png'),

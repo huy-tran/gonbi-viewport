@@ -126,7 +126,6 @@ const SUB_RESOURCE_TYPES = [
 const CH_PLATFORM = {
   ios: 'iOS',
   ipados: 'iOS',
-  watchos: 'iOS',
   android: 'Android',
   macos: 'macOS',
   windows: 'Windows',

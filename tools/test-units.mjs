@@ -62,9 +62,8 @@ const EXPECTED = {
   'macbook-pro-16': ['browser', null],
   'dell-latitude-14': ['browser', null],
   'imac-24': ['browser', null],
-  // A television and a watch get no simulated furniture at all.
+  // A television gets no simulated furniture at all.
   'samsung-tv-55': [null, null],
-  'apple-watch-6': [null, null],
 };
 
 for (const [id, expected] of Object.entries(EXPECTED)) {
@@ -122,7 +121,6 @@ const EXPECTED_PLATFORM = {
   'macbook-air-13': 'macos',
   'dell-latitude-14': 'windows',
   'samsung-tv-55': 'tizen',
-  'apple-watch-6': 'watchos',
 };
 for (const [id, expected] of Object.entries(EXPECTED_PLATFORM)) {
   ok(

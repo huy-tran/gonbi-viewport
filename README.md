@@ -1,7 +1,7 @@
 # Gonbi Viewport
 
-A Chrome extension for checking responsive layouts. Pick from 61 devices grouped
-into Phone, Tablet, Laptop, Desktop and Wearable, and the site opens inside a
+A Chrome extension for checking responsive layouts. Pick from 60 devices grouped
+into Phone, Tablet, Laptop and Desktop, and the site opens inside a
 realistic device frame at that device's exact CSS viewport, with a matching
 User-Agent.
 
@@ -282,9 +282,9 @@ and shrinks the home indicator, as Safari does.
 Toggle it with `U`, or pin it in a link with `?ui=0`. Turning it off gives back
 the exact documented viewport for precise breakpoint work.
 
-**Rotation** is limited to phones and tablets. A laptop, desktop, TV or watch
-does not turn, so the control is disabled and an `orientation=rotated` parameter
-is ignored for them.
+**Rotation** is limited to phones and tablets. A laptop, desktop or TV does not
+turn, so the control is disabled and an `orientation=rotated` parameter is
+ignored for them.
 
 The iframe fills the cutout's *bounding box*, and on most phones that box's
 corners land right on the device's outer curve - so a square iframe pokes its
@@ -296,7 +296,7 @@ this after changing artwork.
 ```
 manifest.json
 assets/
-  frames/           61 generated device frames (SVG, 57 KB total)
+  frames/           60 generated device frames (SVG, 56 KB total)
   icons/
 src/
   background.js     tab-scoped DNR rules, navigation relay, accurate mode,
@@ -313,7 +313,7 @@ tools/              asset pipeline and tests (not shipped)
 
 ## Device frames
 
-`tools/build-frames.mjs` draws all 61 frames as SVG from the viewport dimensions
+`tools/build-frames.mjs` draws all 60 frames as SVG from the viewport dimensions
 in `src/data/devices.js`. Nothing else describes a device: add an entry to the
 catalogue, re-run the generator, and its frame exists.
 
@@ -337,7 +337,7 @@ fitting inside the bar. Getting this wrong is visible - an oversized pill hangs
 below the bar and sits on the page - so `test-units.mjs` asserts, for every
 device, that the camera falls entirely within its status bar.
 
-All 61 frames come to 57 KB, and `validate.mjs` checks every frame's cutout
+All 60 frames come to 56 KB, and `validate.mjs` checks every frame's cutout
 matches its device viewport exactly.
 
 ```bash

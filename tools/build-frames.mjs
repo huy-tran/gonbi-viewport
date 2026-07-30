@@ -61,17 +61,6 @@ function metrics(device) {
   const short = Math.min(w, h);
   const long = Math.max(w, h);
 
-  if (category === 'wearable') {
-    const bezel = Math.round(short * 0.13);
-    return {
-      kind: 'watch',
-      top: bezel,
-      bottom: bezel,
-      side: bezel,
-      radius: Math.round(w * 0.3),
-    };
-  }
-
   if (category === 'laptop') {
     const side = Math.max(8, Math.round(w * 0.011));
     return {
@@ -186,14 +175,13 @@ function layout(device) {
 /**
  * How far the drawing reaches outside the device body on each side.
  *
- * Side buttons, a watch crown and a laptop base all extend past the body, and
- * the canvas has to make room or the viewBox silently clips them.
+ * Side buttons and a laptop base both extend past the body, and the canvas has
+ * to make room or the viewBox silently clips them.
  */
 function overhangs(device, m, body) {
   const stud = m.buttons ? Math.max(2, Math.round(m.side * 0.35)) : 0;
-  const crown = m.kind === 'watch' ? Math.max(3, Math.round(m.side * 0.5)) : 0;
   const base = m.kind === 'laptop' ? Math.round(body.w * 0.045) : 0;
-  return { left: Math.max(stud, base), right: Math.max(stud, crown, base) };
+  return { left: Math.max(stud, base), right: Math.max(stud, base) };
 }
 
 function draw(device) {
@@ -311,12 +299,6 @@ function draw(device) {
     parts.push(
       `<path fill="${BODY_LIGHT}" d="M${round(cx - footW * 0.12)},${round(body.h)} h${round(footW * 0.24)} l${round(footW * 0.1)},${neckH} h${round(-footW * 0.44)} Z"/>`,
       `<rect x="${round(cx - footW / 2)}" y="${round(body.h + neckH)}" width="${footW}" height="${footH}" rx="${round(footH / 2)}" fill="${BODY_LIGHT}"/>`,
-    );
-  } else if (m.kind === 'watch') {
-    const crownW = Math.max(3, Math.round(m.side * 0.5));
-    const crownH = Math.round(device.height * 0.14);
-    parts.push(
-      `<rect x="${round(ox + body.w - 1)}" y="${round(body.h / 2 - crownH / 2)}" width="${crownW}" height="${crownH}" rx="${round(crownW / 2)}" fill="${METAL}"/>`,
     );
   }
 

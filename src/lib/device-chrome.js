@@ -27,7 +27,6 @@ const NONE = { top: null, bottom: null };
  * ones, and modern tablets from the 4:3 generation.
  */
 export function chromeFor(device, rotated = false) {
-  if (device.category === 'wearable') return NONE;
   if (/SMART-TV/.test(device.ua)) return NONE;
 
   if (device.category === 'laptop' || device.category === 'desktop') {

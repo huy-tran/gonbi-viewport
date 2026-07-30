@@ -16,7 +16,6 @@ const SAFARI_IOS_VERSION = '17.0';
 export function platformOf(device) {
   if (/iPhone/.test(device.ua)) return 'ios';
   if (/iPad/.test(device.ua)) return 'ipados';
-  if (/Apple Watch/.test(device.ua)) return 'watchos';
   if (/Android/.test(device.ua)) return 'android';
   if (/Macintosh/.test(device.ua)) return 'macos';
   if (/Windows/.test(device.ua)) return 'windows';
@@ -67,7 +66,6 @@ export const BROWSERS = {
     { id: 'edge', label: 'Edge', chromium: true },
     { id: 'firefox', label: 'Firefox', chromium: false },
   ],
-  watchos: [{ id: 'safari', label: 'Safari', chromium: false }],
   tizen: [{ id: 'tizen', label: 'Tizen Browser', chromium: true }],
   unknown: [{ id: 'chrome', label: 'Chrome', chromium: true }],
 };

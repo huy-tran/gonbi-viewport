@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gonbi Viewport",
   "version": "1.1.0",
-  "description": "Preview any website inside 60+ realistic phone, tablet and laptop viewports. Fuzzy device search, rotate, zoom and screenshot.",
+  "description": "Preview any website inside 60 realistic phone, tablet and laptop viewports. Fuzzy device search, rotate, zoom and screenshot.",
   "minimum_chrome_version": "116",
   "permissions": [
     "contextMenus",

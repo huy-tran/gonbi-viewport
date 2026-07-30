@@ -11,6 +11,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
+import { DEVICES } from '../src/data/devices.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHOTS = path.join(ROOT, 'tools', 'shots');
@@ -99,8 +100,14 @@ try {
   });
   await wait(600);
 
+  // Counted from the catalogue rather than pinned, so retiring a device is not
+  // a test failure.
   const rowCount = await popup.$$eval('.row', (rows) => rows.length);
-  check('popup lists devices', rowCount >= 61, `${rowCount} rows`);
+  check(
+    'popup lists devices',
+    rowCount >= DEVICES.length,
+    `${rowCount} rows for ${DEVICES.length} devices`,
+  );
 
   const popupIcons = await popup.evaluate(() => ({
     brand: !!document.querySelector('.bar__icon svg path'),
@@ -108,7 +115,7 @@ try {
   }));
   check(
     'popup icons rendered',
-    popupIcons.brand && popupIcons.stars >= 61,
+    popupIcons.brand && popupIcons.stars >= DEVICES.length,
     `brand ${popupIcons.brand}, ${popupIcons.stars} stars`,
   );
 

@@ -780,18 +780,5 @@ export const FRAME_GEOMETRY = {
       "heightPct": 90.45,
       "radiusPct": 0.16
     }
-  },
-  "apple-watch-6": {
-    "frame": {
-      "w": 215,
-      "h": 239
-    },
-    "screen": {
-      "leftPct": 9.77,
-      "topPct": 8.79,
-      "widthPct": 75.35,
-      "heightPct": 82.43,
-      "radiusPct": 30.25
-    }
   }
 };

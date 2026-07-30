@@ -18,7 +18,6 @@ const queries = [
   'pixel',
   'ipad',
   '15 pro max',
-  'watch',
   'nord',
   'iphone 15 pro',
   'zzzz',
