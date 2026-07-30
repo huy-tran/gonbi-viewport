@@ -30,6 +30,11 @@ URL, so the usual flow is: browse to a page, click the icon, pick a device.
 - **Star** a device to pin it to the top of the list.
 - Reopening the popup **from inside a viewer tab** swaps the device in place
   rather than opening another tab.
+- **Right-click** a page or a link for *Open in Gonbi Viewport*, which skips the
+  popup: the submenu lists the device you used last, your favourites and
+  recents, and any saved comparison set. Right-clicking a link opens the link,
+  not the page it is on, and doing this inside a viewer sends the site you are
+  already looking at to another device.
 
 In the viewer:
 
@@ -294,10 +299,12 @@ assets/
   frames/           61 generated device frames (SVG, 57 KB total)
   icons/
 src/
-  background.js     tab-scoped DNR rules, navigation relay, accurate mode
+  background.js     tab-scoped DNR rules, navigation relay, accurate mode,
+                    right-click menu
   data/             device catalogue, browser UAs, generated geometry and icons
   inject/           the MAIN-world script: spoofing, touch, audit, reporting
-  lib/              fuzzy matcher, icons, device UI, breakpoints, storage
+  lib/              fuzzy matcher, icons, device UI, breakpoints, storage,
+                    right-click menu choices
   popup/            device picker
   viewer/           viewer.js wires the toolbar and panes; geometry.js,
                     capture.js and audit-ui.js hold the parts worth testing

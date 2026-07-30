@@ -28,6 +28,7 @@ import {
   uaFor,
   isChromium,
 } from '../src/data/browsers.js';
+import { menuDeviceIds, targetUrlOf, MAX_MENU_DEVICES } from '../src/lib/menu.js';
 
 let failures = 0;
 const ok = (name, pass, detail = '') => {
@@ -579,6 +580,87 @@ ok('a long list is sampled down', sampleWidths(wide, 12).length <= 12);
       device: 'd',
       panes: [{ label: 'X', result: { viewportWidth: 1, groups: [] } }],
     }).includes('No issues found.'),
+  );
+}
+
+// --- right-click menu --------------------------------------------------------
+{
+  const ids = (state) => menuDeviceIds(state);
+
+  ok(
+    'menu falls back to starters when nothing is stored',
+    ids({}).length > 0 && ids({}).every((id) => DEVICE_BY_ID.has(id)),
+    ids({}).join(', '),
+  );
+  ok(
+    'menu leads with the last used device',
+    ids({ lastDeviceId: 'galaxy-s24', favourites: ['iphone-15-pro'] })[0] ===
+      'galaxy-s24',
+  );
+  ok(
+    'menu lists each device once',
+    ids({
+      lastDeviceId: 'iphone-15-pro',
+      favourites: ['iphone-15-pro', 'ipad-mini'],
+      recents: ['iphone-15-pro'],
+    }).join(',') === 'iphone-15-pro,ipad-mini',
+  );
+  ok(
+    'menu drops devices that no longer exist',
+    !ids({ favourites: ['nokia-3310'], recents: ['ipad-mini'] }).includes('nokia-3310'),
+  );
+  ok(
+    'menu is capped',
+    ids({ recents: DEVICES.map((d) => d.id) }).length === MAX_MENU_DEVICES,
+  );
+
+  const VIEWER = 'chrome-extension://abc/src/viewer/viewer.html';
+  const target = (info) => targetUrlOf(info, VIEWER);
+
+  ok(
+    'a link beats the page it sits on',
+    target({ linkUrl: 'https://a.test/x', pageUrl: 'https://b.test/' }) ===
+      'https://a.test/x',
+  );
+  ok(
+    'a plain page is the target',
+    target({ pageUrl: 'https://b.test/' }) === 'https://b.test/',
+  );
+  ok(
+    'an iframe on a normal site does not hijack the target',
+    target({ pageUrl: 'https://b.test/', frameUrl: 'https://ads.test/' }) ===
+      'https://b.test/',
+  );
+  ok(
+    'inside a viewer, the framed site is the target',
+    target({
+      pageUrl: `${VIEWER}?devices=iphone-15-pro&url=https%3A%2F%2Fc.test%2F`,
+      frameUrl: 'https://c.test/deep',
+    }) === 'https://c.test/deep',
+  );
+  ok(
+    "a click on the viewer's own furniture falls back to what it is showing",
+    target({
+      pageUrl: `${VIEWER}?devices=iphone-15-pro&url=https%3A%2F%2Fc.test%2F`,
+    }) === 'https://c.test/',
+  );
+  ok(
+    'an empty viewer resolves to nothing rather than its own address',
+    target({ pageUrl: `${VIEWER}?devices=iphone-15-pro` }) === '',
+  );
+  for (const unframable of [
+    'chrome://settings',
+    'about:blank',
+    'file:///c:/x.html',
+    '',
+  ])
+    ok(
+      `${unframable || '(blank)'} is not a target`,
+      target({ pageUrl: unframable }) === '',
+    );
+  ok(
+    'a javascript: link is not a target',
+    target({ linkUrl: 'javascript:alert(1)', pageUrl: 'https://b.test/' }) === '',
   );
 }
 

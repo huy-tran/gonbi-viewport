@@ -138,6 +138,49 @@ try {
   check('fuzzy search "ip15p"', /iPhone 15 Pro/.test(firstHit), firstHit);
   await popup.screenshot({ path: path.join(SHOTS, 'popup.png') });
 
+  // --------------------------------------------------------- context menu --
+  /*
+   * A native context menu cannot be opened or clicked from CDP, so registration
+   * is probed instead: creating an item whose id is already taken fails, and
+   * that failure is the proof the real item is there. What a click then resolves
+   * to is pure logic, covered by test-units. Probed from the popup because the
+   * extension APIs are not bound in the isolated world a worker evaluates in.
+   *
+   * Nothing has been opened yet at this point, so the menu is still showing its
+   * starter devices.
+   */
+  const menuHas = async (id) => {
+    const error = await popup.evaluate(
+      (id) =>
+        new Promise((resolve) => {
+          chrome.contextMenus.create({ id, title: 'probe', contexts: ['page'] }, () => {
+            const message = chrome.runtime.lastError?.message ?? null;
+            // Only ours to remove if this call actually created it.
+            if (message) resolve(message);
+            else chrome.contextMenus.remove(id, () => resolve(null));
+          });
+        }),
+      id,
+    );
+    return /duplicate/i.test(error ?? '');
+  };
+
+  check('right-click menu is registered', await menuHas('gonbi:root'));
+  check(
+    'menu offers a starter device before anything is stored',
+    await menuHas('gonbi:device:iphone-15-pro'),
+  );
+  check(
+    'menu does not offer devices at random',
+    !(await menuHas('gonbi:device:pixel-5')),
+  );
+  // The menu is a view of stored state, so a change to that state rebuilds it.
+  await popup.evaluate(() => chrome.storage.local.set({ lastDeviceId: 'galaxy-fold' }));
+  await wait(900);
+  check('menu follows the last used device', await menuHas('gonbi:device:galaxy-fold'));
+  await popup.evaluate(() => chrome.storage.local.remove('lastDeviceId'));
+  await wait(500);
+
   /*
    * The popup to viewer hand-off, which nothing covered: every other viewer
    * check navigates straight to viewer.html and so never exercised the message,

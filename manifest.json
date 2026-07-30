@@ -5,6 +5,7 @@
   "description": "Preview any website inside 60+ realistic phone, tablet and laptop viewports. Fuzzy device search, rotate, zoom and screenshot.",
   "minimum_chrome_version": "116",
   "permissions": [
+    "contextMenus",
     "declarativeNetRequest",
     "storage",
     "tabs",

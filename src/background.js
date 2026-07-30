@@ -1,10 +1,11 @@
 /**
  * Service worker.
  *
- * Three jobs:
+ * Four jobs:
  *
  *  1. Own the viewer tabs. The popup asks to open a device; we either reuse the
- *     viewer tab the request came from or open a new one.
+ *     viewer tab the request came from or open a new one. The right-click menu
+ *     is a second way in, skipping the popup for the devices you use most.
  *
  *  2. Make the framed site behave like it is on the chosen device. Sites block
  *     framing with X-Frame-Options / CSP frame-ancestors, and serve desktop
@@ -22,6 +23,8 @@
 import { DEVICE_BY_ID } from './data/devices.js';
 import { uaFor, isChromium, platformOf } from './data/browsers.js';
 import { emulateInFrame } from './inject/emulate.js';
+import { menuDeviceIds, targetUrlOf } from './lib/menu.js';
+import { getState, pushRecent } from './lib/store.js';
 
 const VIEWER_PATH = 'src/viewer/viewer.html';
 const RULES_PER_TAB = 3;
@@ -241,11 +244,31 @@ async function clearDeviceRules(tabId) {
   }
 }
 
-function viewerUrl(deviceId, url, orientation) {
-  const params = new URLSearchParams({ device: deviceId });
+/** Takes one device id or several; several open as a comparison. */
+function viewerUrl(deviceIds, url, orientation) {
+  const ids = Array.isArray(deviceIds) ? deviceIds : [deviceIds];
+  const params = new URLSearchParams({ devices: ids.join(',') });
+  if (ids.length > 1) params.set('compare', '1');
   if (url) params.set('url', url);
   if (orientation) params.set('orientation', orientation);
   return chrome.runtime.getURL(`${VIEWER_PATH}?${params}`);
+}
+
+/**
+ * Open a viewer in a new tab and arm it in the same breath, so the rules are
+ * installed before the page it lands on asks for anything.
+ */
+async function openViewerTab(deviceIds, { url, browserId, orientation, at } = {}) {
+  const device = DEVICE_BY_ID.get(deviceIds[0]);
+  if (!device) return null;
+
+  const tab = await chrome.tabs.create({
+    url: viewerUrl(deviceIds, url, orientation),
+    ...at,
+  });
+  await applyDeviceRules(tab.id, device, browserId);
+  await rememberViewer(tab.id, { deviceId: device.id, deviceIds, browserId });
+  return tab;
 }
 
 /**
@@ -466,11 +489,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return sendResponse({ ok: true, tabId: msg.reuseTabId });
         }
 
-        const tab = await chrome.tabs.create({
-          url: viewerUrl(device.id, msg.url, msg.orientation),
+        const tab = await openViewerTab([device.id], {
+          url: msg.url,
+          browserId: msg.browserId,
+          orientation: msg.orientation,
         });
-        await applyDeviceRules(tab.id, device, msg.browserId);
-        await rememberViewer(tab.id, { deviceId: device.id, browserId: msg.browserId });
         return sendResponse({ ok: true, tabId: tab.id });
       }
 
@@ -538,6 +561,120 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   await disableAccurate(tabId);
   await forgetViewer(tabId);
   await clearDeviceRules(tabId);
+});
+
+// ------------------------------------------------------------ context menu --
+
+/**
+ * Right-click a page or a link and send it straight to a device.
+ *
+ * The submenu is built from what the popup already knows about you - the device
+ * you used last, your favourites and recents, and any saved comparison set - so
+ * the everyday case never needs the popup at all. Menu ids carry the device or
+ * set they stand for, which is what makes a click resolvable after the worker
+ * has been torn down and restarted.
+ */
+const MENU_ROOT = 'gonbi:root';
+const MENU_SETS_SEPARATOR = 'gonbi:sets';
+const DEVICE_PREFIX = 'gonbi:device:';
+/** Set names are free text and may contain colons, so this stays a prefix. */
+const SET_PREFIX = 'gonbi:set:';
+const MAX_MENU_SETS = 6;
+
+/*
+ * Registered against everything rather than just 'page', so the item does not
+ * vanish when the pointer happens to be over an image or a text selection.
+ */
+const MENU_CONTEXTS = ['page', 'link', 'image', 'video', 'audio', 'selection', 'frame'];
+
+async function buildContextMenu() {
+  const { lastDeviceId, favourites, recents, sets } = await getState();
+  await chrome.contextMenus.removeAll();
+
+  chrome.contextMenus.create({
+    id: MENU_ROOT,
+    title: 'Open in Gonbi Viewport',
+    contexts: MENU_CONTEXTS,
+  });
+
+  for (const id of menuDeviceIds({ lastDeviceId, favourites, recents })) {
+    const device = DEVICE_BY_ID.get(id);
+    chrome.contextMenus.create({
+      id: DEVICE_PREFIX + id,
+      parentId: MENU_ROOT,
+      title:
+        id === lastDeviceId
+          ? `${device.brand} ${device.name} · last used`
+          : `${device.brand} ${device.name}`,
+      contexts: MENU_CONTEXTS,
+    });
+  }
+
+  sets.slice(0, MAX_MENU_SETS).forEach((set, index) => {
+    if (index === 0) {
+      chrome.contextMenus.create({
+        id: MENU_SETS_SEPARATOR,
+        parentId: MENU_ROOT,
+        type: 'separator',
+        contexts: MENU_CONTEXTS,
+      });
+    }
+    chrome.contextMenus.create({
+      id: SET_PREFIX + set.name,
+      parentId: MENU_ROOT,
+      title: `${set.name} (${set.deviceIds.length} devices)`,
+      contexts: MENU_CONTEXTS,
+    });
+  });
+}
+
+/**
+ * Rebuilds are serialised. Two of them interleaving would have the second
+ * creating ids the first has not removed yet, and chrome.contextMenus answers
+ * a duplicate id by dropping the item.
+ */
+let menuWork = Promise.resolve();
+
+function refreshContextMenu() {
+  menuWork = menuWork
+    .then(buildContextMenu)
+    .catch((err) => console.warn('[gonbi] context menu:', err?.message ?? err));
+  return menuWork;
+}
+
+chrome.runtime.onInstalled.addListener(refreshContextMenu);
+chrome.runtime.onStartup.addListener(refreshContextMenu);
+
+/** The menu is a view of stored state, so it follows that state as it moves. */
+const MENU_KEYS = ['lastDeviceId', 'favourites', 'recents', 'sets'];
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && MENU_KEYS.some((key) => key in changes)) refreshContextMenu();
+});
+
+/** Beside the tab it came from, the way "open link in new tab" behaves. */
+const near = (tab) =>
+  tab ? { index: tab.index + 1, windowId: tab.windowId, openerTabId: tab.id } : {};
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  const id = String(info.menuItemId);
+  const url = targetUrlOf(info, chrome.runtime.getURL(VIEWER_PATH));
+
+  if (id.startsWith(DEVICE_PREFIX)) {
+    const deviceId = id.slice(DEVICE_PREFIX.length);
+    if (!DEVICE_BY_ID.has(deviceId)) return;
+    await openViewerTab([deviceId], { url, at: near(tab) });
+    // Keeps "last used" honest, and the popup's recents in step with the menu.
+    await pushRecent(deviceId);
+    return;
+  }
+
+  if (id.startsWith(SET_PREFIX)) {
+    const { sets } = await getState();
+    const set = sets.find((s) => s.name === id.slice(SET_PREFIX.length));
+    const ids = (set?.deviceIds ?? []).filter((d) => DEVICE_BY_ID.has(d));
+    if (ids.length) await openViewerTab(ids, { url, at: near(tab) });
+  }
 });
 
 // ------------------------------------------------------- framed page tracking --
