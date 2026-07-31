@@ -29,6 +29,11 @@ import {
   isChromium,
 } from '../src/data/browsers.js';
 import { menuDeviceIds, targetUrlOf, MAX_MENU_DEVICES } from '../src/lib/menu.js';
+import {
+  cookieHeader,
+  scriptCookies,
+  parseCookieAssignment,
+} from '../src/lib/cookies.js';
 
 let failures = 0;
 const ok = (name, pass, detail = '') => {
@@ -660,6 +665,81 @@ ok('a long list is sampled down', sampleWidths(wide, 12).length <= 12);
     'a javascript: link is not a target',
     target({ linkUrl: 'javascript:alert(1)', pageUrl: 'https://b.test/' }) === '',
   );
+}
+
+// --- session bridge cookies --------------------------------------------------
+{
+  const jar = [
+    { name: 'session', value: 'abc', httpOnly: true },
+    { name: 'token', value: 'xyz', httpOnly: false },
+    { name: 'empty', value: '' },
+  ];
+
+  ok(
+    'the header carries every cookie in the jar',
+    cookieHeader(jar) === 'session=abc; token=xyz; empty=',
+  );
+  ok('an empty jar makes no header', cookieHeader([]) === '');
+  ok('a missing jar makes no header', cookieHeader(undefined) === '');
+
+  // HttpOnly must never reach page script; that is the whole point of the flag.
+  ok(
+    'only script-visible cookies are handed to the page',
+    JSON.stringify(scriptCookies(jar)) ===
+      JSON.stringify([
+        { name: 'token', value: 'xyz' },
+        { name: 'empty', value: '' },
+      ]),
+  );
+
+  const NOW = Date.parse('2026-01-01T00:00:00Z');
+  const parse = (text) => parseCookieAssignment(text, NOW);
+
+  const plain = parse('token=xyz');
+  ok('a bare assignment parses', plain.name === 'token' && plain.value === 'xyz');
+  ok('path defaults to the root', plain.path === '/');
+  ok('a bare assignment is a session cookie', plain.expirationDate === undefined);
+  ok('a bare assignment is not a deletion', plain.removed === false);
+
+  const full = parse('a=1; Path=/app; Secure; SameSite=None; Max-Age=60');
+  ok('path is read', full.path === '/app');
+  ok('secure is read', full.secure === true);
+  ok('samesite=none becomes chrome enum', full.sameSite === 'no_restriction');
+  ok('samesite=strict becomes chrome enum', parse('a=1; SameSite=Strict').sameSite === 'strict');
+  ok('max-age becomes an absolute expiry', full.expirationDate === NOW / 1000 + 60);
+  ok(
+    'expires becomes an absolute expiry',
+    parse('a=1; Expires=Thu, 02 Jan 2026 00:00:00 GMT').expirationDate ===
+      Date.parse('2026-01-02T00:00:00Z') / 1000,
+  );
+
+  // Scripts sign out by re-setting the cookie as already expired. A bridge that
+  // took that for a write would put the session straight back.
+  ok('max-age=0 is a deletion', parse('a=1; Max-Age=0').removed === true);
+  ok('a negative max-age is a deletion', parse('a=1; Max-Age=-1').removed === true);
+  ok(
+    'a past expiry is a deletion',
+    parse('a=1; Expires=Thu, 01 Jan 1970 00:00:00 GMT').removed === true,
+  );
+  ok(
+    'a deletion carries no expiry to write',
+    parse('a=1; Max-Age=0').expirationDate === undefined,
+  );
+  ok(
+    'max-age wins over expires, as the spec says',
+    parse('a=1; Max-Age=60; Expires=Thu, 01 Jan 1970 00:00:00 GMT').removed === false,
+  );
+  ok('an unparseable expires is ignored', parse('a=1; Expires=soon').removed === false);
+
+  ok('a value may contain an equals sign', parse('a=b=c').value === 'b=c');
+  ok('whitespace around the pair is trimmed', parse(' a = 1 ; Path=/').value === '1');
+  ok('a nameless assignment is not a cookie', parse('=1') === null);
+  ok('a bare flag is not a cookie', parse('Secure') === null);
+  ok('nothing is not a cookie', parse('') === null);
+  // "path" inside a name must not be mistaken for the attribute.
+  ok('an attribute name inside the cookie name is not an attribute', parse('path=x').name === 'path');
+  ok('no samesite means no override', parse('a=1').sameSite === undefined);
+  ok('an unknown samesite is left to default', parse('a=1; SameSite=Wat').sameSite === undefined);
 }
 
 console.log(

@@ -10,6 +10,8 @@
  *   - navigator.* so client-side device detection agrees with the UA header
  *   - synthesized touch events so swipe-driven UI responds to a mouse drag
  *   - scroll reporting so the viewer can keep side-by-side devices in step
+ *   - document.cookie, when the session bridge is on, so a page whose sign-in
+ *     lives in a script-readable cookie can find it here
  *
  * It also reports things only code inside the page can see: the `@media`
  * condition texts of its own stylesheets, its scroll metrics, and any errors it
@@ -18,7 +20,7 @@
  * beyond the reach of tests.
  */
 
-export function emulateInFrame({ devices, syncScroll }) {
+export function emulateInFrame({ devices, syncScroll, cookies }) {
   // Injection happens on every navigation; make it idempotent.
   if (window.__gonbiEmulated) return;
   window.__gonbiEmulated = true;
@@ -187,6 +189,84 @@ export function emulateInFrame({ devices, syncScroll }) {
       /* parent gone */
     }
   };
+
+  // ----------------------------------------------------------------- cookies --
+  /**
+   * Back `document.cookie` with the jar the extension read for us.
+   *
+   * This frame is third-party to the extension page holding it, so Chrome
+   * refuses the page's own cookie access: `document.cookie` reads back empty even
+   * when the request cookies arrived intact, and a single-page app that keeps its
+   * token there behaves as though nobody is signed in. The shim answers from our
+   * own store instead, which needs no cookie access inside the frame at all.
+   *
+   * Reads merge in whatever the real store does return, so a frame that *can*
+   * see its cookies is never made worse off. Writes go both to the real store,
+   * in case it works, and back to the extension, which persists them properly -
+   * that is what makes signing in here outlast the tab.
+   *
+   * Only cookies the site would expose to script are ever seeded in; HttpOnly
+   * ones travel as a request header the page cannot read, as they should.
+   */
+  if (cookies) {
+    const jar = new Map(cookies.map((c) => [c.name, c.value]));
+    const real = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+
+    const serialise = (map) =>
+      [...map].map(([name, value]) => `${name}=${value}`).join('; ');
+
+    const eachPair = (text, fn) => {
+      for (const pair of String(text).split(';')) {
+        const at = pair.indexOf('=');
+        if (at < 1) continue;
+        fn(pair.slice(0, at).trim(), pair.slice(at + 1).trim());
+      }
+    };
+
+    // Scripts delete a cookie by re-setting it as already expired; treating that
+    // as a write would put a signed-out session straight back.
+    const isDeletion = (text) => {
+      const maxAge = /(?:^|;)\s*max-age\s*=\s*(-?\d+)/i.exec(text);
+      if (maxAge) return Number(maxAge[1]) <= 0;
+      const expires = /(?:^|;)\s*expires\s*=\s*([^;]+)/i.exec(text);
+      const at = expires ? Date.parse(expires[1]) : NaN;
+      return !Number.isNaN(at) && at <= Date.now();
+    };
+
+    try {
+      Object.defineProperty(document, 'cookie', {
+        configurable: true,
+        get() {
+          const merged = new Map(jar);
+          try {
+            eachPair(real?.get?.call(document) ?? '', (name, value) =>
+              merged.set(name, value),
+            );
+          } catch {
+            /* the real store is unavailable, which is the case we exist for */
+          }
+          return serialise(merged);
+        },
+        set(text) {
+          const [pair] = String(text).split(';');
+          const at = pair.indexOf('=');
+          if (at > 0) {
+            const name = pair.slice(0, at).trim();
+            if (isDeletion(text)) jar.delete(name);
+            else jar.set(name, pair.slice(at + 1).trim());
+          }
+          try {
+            real?.set?.call(document, text);
+          } catch {
+            /* blocked; our own store is the copy that counts */
+          }
+          post({ __gonbi: 'cookieWritten', text: String(text) });
+        },
+      });
+    } catch {
+      /* a page that has already locked the property down keeps its own */
+    }
+  }
 
   /**
    * Scrolls we applied ourselves must not be reported back as if the reader had

@@ -32,6 +32,7 @@ const ICON_MAP = {
   syncScroll: 'Link04Icon',
   settings: 'Settings01Icon',
   accurate: 'DashboardSpeed02Icon',
+  session: 'Key01Icon',
   warning: 'Alert02Icon',
   record: 'RecordIcon',
   stop: 'StopIcon',

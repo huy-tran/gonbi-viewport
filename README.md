@@ -20,6 +20,10 @@ No build step - the repository *is* the extension.
 2. Turn on **Developer mode**
 3. **Load unpacked** and select this folder
 
+Released versions carry a loadable zip on the
+[releases page](https://github.com/huy-tran/gonbi-viewport/releases), and what
+changed in each is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Using it
 
 Click the toolbar icon to get the device picker. It opens on the current tab's
@@ -198,6 +202,51 @@ combination, so iOS Chrome correctly becomes a `CriOS` WebKit UA rather than a
 desktop Chrome one. Picking a non-Chromium browser also stops the `Sec-CH-UA`
 client hints being sent at all, as Safari and Firefox do.
 
+### Signed-in sites
+
+A framed site is cross-site to the extension page holding it, so the browser
+treats it as a third party where cookies are concerned. In particular
+**`document.cookie` reads back empty inside the frame** - verified, not assumed -
+so a single-page app that keeps its session token in a cookie decides nobody is
+signed in and redirects to its login page. Signing in there appears to do
+nothing, because the token it writes goes nowhere either.
+
+Request cookies are a separate question and depend on the browser: Chrome does
+not necessarily treat an extension holding host permissions as a third party for
+the request itself, so the `Cookie` header may arrive intact even with no help
+from us. It is the script-visible half that reliably breaks, and a site with an
+`HttpOnly` server session behind blocked third-party cookies needs the header
+half too.
+
+The **sign-in bridge** (the key button, next to accurate mode) carries your real
+session in. It is off by default and remembered per host, because it hands a
+site's cookies to a frame the browser had decided to withhold them from - fine
+for the staging site you are testing, not something to do to every site you
+preview.
+
+It works in two halves:
+
+- a `Cookie` request header written by a per-tab `declarativeNetRequest` rule,
+  scoped to the framed host so one site's session can never be handed to
+  another. This is the only route that reaches `HttpOnly` server sessions, and it
+  is unaffected by third-party cookie blocking because the header is rewritten on
+  the way out rather than read from a jar the frame is denied.
+- a `document.cookie` shim in the framed page, seeded with the cookies a script
+  is allowed to see. This is the half that fixes the common case. Reads merge in
+  whatever the real store returns, so a frame that can see its own cookies is
+  never made worse off. Writes are relayed back and written to the real jar,
+  which is what makes signing in inside the viewer outlast the tab.
+
+`HttpOnly` cookies are never handed to the shim - they ride the header, invisible
+to page script, exactly as they would in a normal tab.
+
+Two things it does not solve. A sign-in that needs a top-level navigation or a
+popup - most OAuth and SSO flows - cannot complete in a sandboxed frame at all,
+so sign in normally first and let the bridge carry the result. And a session
+served from a *different* host than the page (an API on its own subdomain using
+cookie auth rather than a token) is only bridged once the frame has been there,
+since the rule follows the frame's host.
+
 ### Accurate mode
 
 Some things cannot be faked from headers or injected script. Accurate mode
@@ -304,7 +353,7 @@ src/
   data/             device catalogue, browser UAs, generated geometry and icons
   inject/           the MAIN-world script: spoofing, touch, audit, reporting
   lib/              fuzzy matcher, icons, device UI, breakpoints, storage,
-                    right-click menu choices
+                    cookies for the sign-in bridge, right-click menu choices
   popup/            device picker
   viewer/           viewer.js wires the toolbar and panes; geometry.js,
                     capture.js and audit-ui.js hold the parts worth testing
@@ -442,8 +491,15 @@ npx @puppeteer/browsers install chrome@stable --path tools/browsers
   `getDisplayMedia`, and saves WebM rather than GIF.
 - **CSP is removed wholesale, inside the viewer tab only.** `declarativeNetRequest`
   can delete a header but not edit one directive out of it, so the page's other
-  CSP protections are also dropped while it is framed. Do not use the viewer to
-  log into anything sensitive.
+  CSP protections are also dropped while it is framed. That is the reason the
+  sign-in bridge is opt-in per host: a framed page is running with fewer
+  protections than usual, so prefer signing in normally and letting the bridge
+  carry the session, and keep it away from anything you would not test with.
+- **The sign-in bridge cannot complete an SSO flow.** Anything that needs a
+  top-level navigation or a popup - most OAuth and SSO - will not finish inside a
+  sandboxed frame. Sign in normally first. A cookie session served from a host the
+  frame has not visited is likewise only bridged once it goes there, since the
+  rule follows the frame's host.
 - **The simulated device UI is representative, not exact.** Bar heights are the
   standard values for each device class, not per-model measurements, and the
   status bar does not follow the page's `theme-color` the way real iOS does.

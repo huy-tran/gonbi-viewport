@@ -37,6 +37,7 @@ for (const rel of [
   'src/viewer/viewer.js',
   'src/lib/fuzzy.js',
   'src/lib/store.js',
+  'src/lib/cookies.js',
   'src/lib/icon.js',
   'src/lib/device-chrome.js',
   'src/lib/breakpoints.js',

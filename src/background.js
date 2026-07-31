@@ -18,16 +18,23 @@
  *     cross-origin frame's location, so navigations inside the frame are
  *     relayed from webNavigation - without this the address bar, reload button
  *     and pop-out all keep pointing at the page you started on.
+ *
+ *  4. Carry the reader's session into the frame when they ask for it. A framed
+ *     site is third-party to the extension page holding it, so the browser hides
+ *     the cookies it is already signed in with. See lib/cookies.js.
  */
 
 import { DEVICE_BY_ID } from './data/devices.js';
 import { uaFor, isChromium, platformOf } from './data/browsers.js';
 import { emulateInFrame } from './inject/emulate.js';
 import { menuDeviceIds, targetUrlOf } from './lib/menu.js';
-import { getState, pushRecent } from './lib/store.js';
+import { getState, pushRecent, hostOf } from './lib/store.js';
+import { cookieHeader, scriptCookies, parseCookieAssignment } from './lib/cookies.js';
 
 const VIEWER_PATH = 'src/viewer/viewer.html';
-const RULES_PER_TAB = 3;
+/** Three for device emulation, plus one for the session bridge. */
+const RULES_PER_TAB = 4;
+const DEVICE_RULES = 3;
 
 /**
  * Rule ids must be small positive integers, so they cannot be derived from the
@@ -164,6 +171,8 @@ async function applyDeviceRules(tabId, device, browserId) {
   const ids = await ruleIdsForTab(tabId, { create: true });
   const [frameRuleId, uaRuleId, hintsRuleId] = ids;
   const ua = uaFor(device, browserId);
+  // The session bridge owns the fourth slot and outlives a device change.
+  const deviceIds = ids.slice(0, DEVICE_RULES);
 
   const addRules = [
     {
@@ -222,12 +231,116 @@ async function applyDeviceRules(tabId, device, browserId) {
   ];
 
   await chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: ids,
+    removeRuleIds: deviceIds,
     addRules,
   });
   // Only once the rules are actually in, so a failed update is retried.
   ruleSignatures.set(tabId, signature);
   await persist();
+}
+
+// ---------------------------------------------------------- session bridge --
+
+/**
+ * Give the framed page the cookies it would have as a normal tab.
+ *
+ * The header rule is scoped to the tab *and* the framed host, so one site's
+ * session can never be handed to another - a viewer showing a.test asks for
+ * a.test's jar only, and the rule is rewritten whenever the frame moves.
+ *
+ * Priority 2 beats the device rules, which do not touch cookies but are matched
+ * against the same requests; a lower priority would be a coin toss.
+ *
+ * Returns `script`, the cookies a script in the page is allowed to see, for the
+ * shim in inject/emulate.js to seed itself with. HttpOnly ones are deliberately
+ * not among them: they ride the header, and handing them to page script would
+ * give the site more than a real browser ever would. `total` is the whole jar,
+ * which is what the viewer reports to the reader.
+ */
+async function bridgeSession(tabId, url) {
+  const [cookieRuleId] = (await ruleIdsForTab(tabId, { create: true })).slice(
+    DEVICE_RULES,
+  );
+  const host = hostOf(url);
+  if (!host || !/^https?:$/.test(new URL(url).protocol)) {
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [cookieRuleId],
+    });
+    return { script: [], total: 0 };
+  }
+
+  const jar = await chrome.cookies.getAll({ url });
+  const header = cookieHeader(jar);
+
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [cookieRuleId],
+    addRules: header
+      ? [
+          {
+            id: cookieRuleId,
+            priority: 2,
+            action: {
+              type: 'modifyHeaders',
+              requestHeaders: [{ header: 'cookie', operation: 'set', value: header }],
+            },
+            condition: {
+              tabIds: [tabId],
+              requestDomains: [host],
+              resourceTypes: SUB_RESOURCE_TYPES,
+            },
+          },
+        ]
+      : [],
+  });
+
+  return { script: scriptCookies(jar), total: jar.length };
+}
+
+async function clearSessionBridge(tabId) {
+  const ids = await ruleIdsForTab(tabId);
+  if (!ids.length) return;
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: ids.slice(DEVICE_RULES),
+  });
+}
+
+/**
+ * Persist a cookie the framed page set through the shim.
+ *
+ * The shim cannot reach chrome.cookies from the page's world, so it relays the
+ * raw assignment and this writes it to the real jar - which is what makes a
+ * sign-in performed inside the viewer still be there next time, in the viewer
+ * and in a normal tab alike.
+ *
+ * `url` comes from the viewer, which knows where its own frame is, and bounds
+ * the write to that origin: the page can only ever be given what it could have
+ * set for itself.
+ */
+async function writeBridgedCookie(url, text) {
+  if (!hostOf(url) || !/^https?:$/.test(new URL(url).protocol)) return;
+  const cookie = parseCookieAssignment(text);
+  if (!cookie) return;
+
+  const { name, value, path, secure, sameSite, expirationDate, removed } = cookie;
+  const target = new URL(url);
+  target.pathname = path;
+  target.search = '';
+  target.hash = '';
+
+  if (removed) {
+    await chrome.cookies.remove({ url: target.href, name });
+    return;
+  }
+  await chrome.cookies.set({
+    url: target.href,
+    name,
+    value,
+    path,
+    // A cookie can only be Secure if we are writing it over https anyway.
+    secure: secure && target.protocol === 'https:',
+    ...(sameSite ? { sameSite } : {}),
+    ...(expirationDate ? { expirationDate } : {}),
+  });
 }
 
 async function clearDeviceRules(tabId) {
@@ -514,6 +627,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return sendResponse({ ok: true });
       }
 
+      /*
+       * Turning the bridge on or off, and refreshing it for a URL the viewer is
+       * about to load. The viewer awaits this before pointing the frame, so the
+       * very first request already carries the session.
+       */
+      case 'setSessionBridge': {
+        const tabId = sender.tab?.id;
+        if (tabId == null) return sendResponse({ ok: false, error: 'no tab' });
+        await rememberViewer(tabId, { bridge: !!msg.on });
+        if (!msg.on) {
+          await clearSessionBridge(tabId);
+          return sendResponse({ ok: true, cookies: 0 });
+        }
+        const bridged = msg.url ? await bridgeSession(tabId, msg.url) : { total: 0 };
+        return sendResponse({ ok: true, cookies: bridged.total });
+      }
+
+      case 'cookieWritten': {
+        await writeBridgedCookie(msg.url, msg.text);
+        return sendResponse({ ok: true });
+      }
+
       case 'setEmulation': {
         const tabId = sender.tab?.id;
         if (tabId == null) return sendResponse({ ok: false, error: 'no tab' });
@@ -696,6 +831,25 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
     notifyViewer(details.tabId, { type: 'frameNavigated', url: details.url });
   }
 
+  /*
+   * Re-point the bridge at wherever the frame just went. A login flow that hops
+   * to another host would otherwise keep being handed the first host's jar, and
+   * the shim below would be seeded with cookies that do not belong to the page
+   * it is about to run in.
+   *
+   * This request has already gone out, so its own Cookie header is whatever the
+   * previous rule said. The shim covers the token single-page apps read from
+   * script, and the refreshed rule covers everything the page asks for next.
+   */
+  let cookies = null;
+  if (viewer.bridge && details.parentFrameId === 0) {
+    try {
+      cookies = (await bridgeSession(details.tabId, details.url)).script;
+    } catch {
+      /* tab gone, or a URL with no jar of its own */
+    }
+  }
+
   try {
     if (device.touch) {
       // A classic scrollbar eats ~15px of layout width, so a "393px" phone
@@ -723,6 +877,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
             dpr: d.dpr,
           })),
           syncScroll: !!viewer.syncScroll,
+          cookies,
         },
       ],
     });

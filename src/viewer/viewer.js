@@ -13,6 +13,8 @@ import {
   pushRecent,
   saveSet,
   rememberSiteDevices,
+  rememberSiteSession,
+  hostOf,
 } from '../lib/store.js';
 
 const el = {};
@@ -36,6 +38,7 @@ for (const id of [
   'paneSizer',
   'uiToggle',
   'syncToggle',
+  'sessionToggle',
   'accurateToggle',
   'emulationToggle',
   'shot',
@@ -94,6 +97,11 @@ let zoomMode = 'fit';
 let showFrame = true;
 let showDeviceUi = true;
 let syncScroll = false;
+/**
+ * Carry the reader's real session into the frame. Per host and remembered per
+ * host, since it is consent for one site rather than a display preference.
+ */
+let sessionBridge = false;
 /**
  * Comparison mode is explicit rather than inferred from the device count, so it
  * can be on with a single device and still offer the add tile.
@@ -513,6 +521,19 @@ function armTab() {
   return promise;
 }
 
+/**
+ * Point the session bridge at `url`, or tear it down.
+ *
+ * Refreshed on every load rather than cached like the arm above: the answer is
+ * the reader's live cookie jar, which changes without telling us - they may have
+ * signed in, or out, in another tab since the last load.
+ */
+function bridgeFor(url) {
+  return chrome.runtime
+    .sendMessage({ type: 'setSessionBridge', on: sessionBridge, url })
+    .catch((error) => ({ ok: false, error: String(error?.message ?? error) }));
+}
+
 async function load(url, { force = false, fromHistory = false } = {}) {
   const sameUrl = url === currentUrl;
   currentUrl = url;
@@ -546,9 +567,12 @@ async function load(url, { force = false, fromHistory = false } = {}) {
    * holding the whole load hostage to it.
    */
   const arm = armTab();
+  // Only when it is on: when it is off there is nothing to install, and the
+  // round trip would be pure latency in front of every load.
+  const bridge = sessionBridge ? bridgeFor(url) : null;
   const restore =
     force && !fromHistory && sameUrl && panes[0] ? measure(panes[0], 400) : null;
-  const [armed, before] = await Promise.all([arm, restore]);
+  const [armed, , before] = await Promise.all([arm, bridge, restore]);
   pendingScroll = before?.scrollY || 0;
 
   if (arm && !armed?.ok) {
@@ -719,6 +743,25 @@ window.addEventListener('message', (event) => {
       if (event.source !== panes[0]?.screen.contentWindow) break;
       if (!pageErrors.includes(data.message)) pageErrors.push(data.message);
       renderErrors();
+      break;
+    }
+    case 'cookieWritten': {
+      /*
+       * The framed page set a cookie through the shim. Only the leading pane's
+       * writes are kept - the panes all show the same site, and a sign-in
+       * performed in one would otherwise be written several times over.
+       *
+       * `currentUrl` is where we know the frame to be, and it decides the origin
+       * the cookie is written for. Taking an origin from the message instead
+       * would let a page name someone else's.
+       */
+      if (!sessionBridge) break;
+      if (event.source !== panes[0]?.screen.contentWindow) break;
+      chrome.runtime
+        .sendMessage({ type: 'cookieWritten', url: currentUrl, text: data.text })
+        .catch(() => {
+          /* nothing the reader can act on */
+        });
       break;
     }
   }
@@ -1011,6 +1054,28 @@ el.syncToggle.addEventListener('click', async () => {
   await load(currentUrl, { force: true });
 });
 
+el.sessionToggle.addEventListener('click', async () => {
+  sessionBridge = !sessionBridge;
+  paintToggle(el.sessionToggle, sessionBridge);
+  await rememberSiteSession(currentUrl, sessionBridge);
+
+  if (!sessionBridge) {
+    await bridgeFor(currentUrl);
+    flash('Sign-in bridge off');
+    updateNote();
+    return;
+  }
+  // A page already showing its login form will not re-check on its own.
+  const response = await bridgeFor(currentUrl);
+  flash(
+    response?.cookies
+      ? `Sign-in bridge on - ${response.cookies} cookie${response.cookies === 1 ? '' : 's'} carried in`
+      : 'Sign-in bridge on - no cookies found for this site, so sign in here once',
+  );
+  updateNote();
+  if (currentUrl) await load(currentUrl, { force: true });
+});
+
 // ------------------------------------------------------------- emulation ----
 
 async function pushEmulation() {
@@ -1151,6 +1216,7 @@ function updateNote() {
   const parts = [primary().touch ? 'Touch' : 'Mouse', 'UA spoofed'];
   if (devices.length > 1) parts.push(`UA follows ${primary().name}`);
   if (emulation.accurate) parts.push('accurate mode');
+  if (sessionBridge) parts.push('signed in');
   el.note.textContent = parts.join(' · ');
 }
 
@@ -1307,6 +1373,10 @@ window.addEventListener('resize', () => {
   const [tab, saved] = await Promise.all([chrome.tabs.getCurrent(), getState()]);
   ownTabId = tab?.id ?? null;
 
+  // Consent already given for this host, so the first load carries the session
+  // rather than making the reader watch a login page appear first.
+  sessionBridge = !!saved.siteSessions?.[hostOf(currentUrl)];
+
   zoomMode = saved.zoom ?? 'fit';
   showFrame = saved.showFrame ?? true;
   syncScroll = saved.syncScroll ?? false;
@@ -1325,6 +1395,7 @@ window.addEventListener('resize', () => {
   paintToggle(el.uiToggle, showDeviceUi);
   paintToggle(el.syncToggle, syncScroll);
   paintToggle(el.compareToggle, comparing);
+  paintToggle(el.sessionToggle, sessionBridge);
 
   buildDeviceSelect();
   // buildBrowserSelect can correct browserId, so the arm has to follow it - but

@@ -14,6 +14,8 @@ const DEFAULTS = {
   sets: [],
   /** hostname -> device ids last used there. */
   siteDevices: {},
+  /** hostname -> true where the reader asked for their session to be bridged. */
+  siteSessions: {},
 };
 
 const MAX_RECENTS = 6;
@@ -95,4 +97,23 @@ export async function recallSiteDevices(url) {
   if (!host) return null;
   const { siteDevices } = await getState();
   return siteDevices[host] ?? null;
+}
+
+/**
+ * Which sites the reader has asked to carry their session into.
+ *
+ * Per host and opt-in on purpose. The bridge hands a site's real cookies to a
+ * frame the browser had decided to withhold them from, which is exactly what
+ * you want on a staging site you are signed into and not something to do to
+ * every site you happen to preview. Turning it off forgets the host outright
+ * rather than storing a `false`, so the record is only ever of consent given.
+ */
+export async function rememberSiteSession(url, on) {
+  const host = hostOf(url);
+  if (!host) return;
+  const { siteSessions } = await getState();
+  const next = { ...siteSessions };
+  if (on) next[host] = true;
+  else delete next[host];
+  await setState({ siteSessions: next });
 }
