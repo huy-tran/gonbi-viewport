@@ -27,6 +27,20 @@ for (const ref of manifestRefs) {
   if (!exists(ref)) problems.push(`manifest references missing file: ${ref}`);
 }
 
+/*
+ * The release workflow builds its notes from the changelog section matching the
+ * manifest version, so a missing section ships a release with a bare commit
+ * list. A warning rather than a problem: the version is often bumped first and
+ * the entry written before tagging, and that window should not fail the suite.
+ */
+const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+const version = manifest.version.replace(/\./g, '\\.');
+if (!new RegExp(`^## ${version}(\\s|$)`, 'm').test(changelog)) {
+  warnings.push(
+    `CHANGELOG.md has no "## ${manifest.version}" section - a release tagged now would carry generated notes`,
+  );
+}
+
 // --- source files referenced by the pages ------------------------------------
 for (const rel of [
   'src/popup/popup.html',

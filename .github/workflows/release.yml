@@ -2,7 +2,10 @@
 #
 #   git tag v1.1.0 && git push origin v1.1.0
 #
-# That publishes a GitHub release carrying the loadable extension as a zip.
+# That publishes a GitHub release carrying the loadable extension as a zip, with
+# the notes taken from that version's section of CHANGELOG.md - so write the
+# entry before you tag.
+#
 # Nothing is published from a branch push, so an ordinary merge never releases.
 name: Release
 
@@ -65,6 +68,30 @@ jobs:
             -x '*/.DS_Store'
           unzip -l "gonbi-viewport-${GITHUB_REF_NAME}.zip"
 
+      # The release notes are the changelog's own section for this version, so
+      # what the release says and what the repository says cannot drift. Matched
+      # on the whole version field rather than a prefix, or 1.2.0 would match a
+      # later 1.2.01. A tag with no section falls back to the generated commit
+      # list, which keeps a prerelease from needing a changelog entry first.
+      - name: Collect the release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v want="$version" '
+            $1 == "##" { if (found) exit; found = ($2 == want); next }
+            found
+          ' CHANGELOG.md > notes.md
+
+          if [ -s notes.md ]; then
+            printf '\nFull changelog: %s/%s/blob/%s/CHANGELOG.md\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" >> notes.md
+            echo "notes=--notes-file=notes.md" >> "$GITHUB_ENV"
+            echo "using the CHANGELOG.md section for ${version}:"
+            cat notes.md
+          else
+            echo "::warning::CHANGELOG.md has no section for ${version}, using generated notes"
+            echo "notes=--generate-notes" >> "$GITHUB_ENV"
+          fi
+
       # gh ships on the runner, so this needs no third-party action. A tag with
       # a suffix (v1.1.0-beta.1) is marked as a prerelease rather than becoming
       # the version people are offered by default.
@@ -78,6 +105,6 @@ jobs:
           esac
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
+            "$notes" \
             $prerelease \
             "gonbi-viewport-${GITHUB_REF_NAME}.zip"

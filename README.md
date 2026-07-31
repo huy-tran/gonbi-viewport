@@ -432,7 +432,7 @@ inline `<svg>` creeps back into the HTML.
 cd tools
 npm install
 npm test          # fast: structural, unit, search, characters, lint
-npm run test:e2e  # loads the extension in real Chrome, 67 end-to-end checks
+npm run test:e2e  # loads the extension in real Chrome, 81 end-to-end checks
 npm run test:all  # both
 npm run fix       # reformat and strip stray control characters
 ```
@@ -450,6 +450,12 @@ The individual pieces, if you want one of them:
 
 `.github/workflows/ci.yml` runs the fast suite; `smoke.mjs` is deliberately left
 out of CI because it drives a real browser against live sites.
+
+The sign-in bridge is the exception to "against live sites": asserting anything
+about a cookie jar would otherwise mean shipping credentials, so `smoke.mjs`
+starts a local server standing in for a site you are signed into - an `HttpOnly`
+session, a script-readable token beside it, and a second hostname on the same
+server to prove one host's cookies are not sent to another.
 
 Two diagnostics exist for the things assertions cannot describe:
 `preview-frames.mjs` draws a contact sheet of the generated frames, and

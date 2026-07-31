@@ -6,6 +6,21 @@ GitHub release carrying the loadable zip. Versions follow
 `manifest.json` and on the tag are checked against each other before anything
 ships.
 
+## Unreleased
+
+Nothing user-facing. Two pieces of upkeep the 1.2.0 release turned up:
+
+- Release notes are now taken from this file's section for the version being
+  tagged, rather than a generated list of commit subjects. A tag with no matching
+  section falls back to generated notes, so a prerelease does not need an entry
+  first, and `validate.mjs` warns when `manifest.json` names a version this file
+  has no section for.
+- The sign-in bridge is covered by the end-to-end suite: `smoke.mjs` starts a
+  local server standing in for a site you are signed into and asserts that the
+  frame sees the script-readable token, that the `HttpOnly` session stays out of
+  page script, that writes and deletions reach the real jar, and that a sibling
+  host is not sent the framed host's cookies. 81 checks, up from 72.
+
 ## 1.2.0 - 2026-07-31
 
 ### Signed-in sites now work

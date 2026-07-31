@@ -6,6 +6,7 @@
  */
 
 import puppeteer from 'puppeteer-core';
+import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -63,6 +64,64 @@ async function until(read, done, timeoutMs = 90000, stepMs = 500) {
 
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gonbi-'));
 fs.mkdirSync(SHOTS, { recursive: true });
+
+/**
+ * A local stand-in for a site you are signed into, for the sign-in bridge.
+ *
+ * It has to be local. The bridge's whole subject is the cookie jar, and a live
+ * site would mean either shipping credentials or asserting against someone
+ * else's login page. This serves the shape that matters: an HttpOnly server
+ * session, a script-readable token beside it, and a page that reports both what
+ * arrived in the request and what its own script can see.
+ *
+ * Every request is recorded, which is what lets the test prove a negative - that
+ * one host's cookies are not sent to another.
+ */
+const requests = [];
+
+const siteServer = http.createServer((req, res) => {
+  requests.push({
+    url: req.url,
+    host: req.headers.host,
+    cookie: req.headers.cookie ?? '',
+  });
+
+  if (req.url === '/signin') {
+    res.writeHead(200, {
+      'content-type': 'text/html',
+      'set-cookie': [
+        'sid=SERVER-SESSION; Path=/; HttpOnly; SameSite=Strict',
+        'tok=SCRIPT-TOKEN; Path=/; SameSite=Strict',
+      ],
+    });
+    res.end('<!doctype html><title>signed in</title><h1>signed in</h1>');
+    return;
+  }
+
+  if (req.url === '/leak') {
+    res.writeHead(204, { 'access-control-allow-origin': '*' });
+    res.end();
+    return;
+  }
+
+  const cookie = req.headers.cookie ?? '';
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.end(`<!doctype html><title>app</title>
+    <h1 id="state">${/(?:^|;\s*)sid=SERVER-SESSION/.test(cookie) ? 'DASHBOARD' : 'LOGIN'}</h1>
+    <pre id="header">${cookie}</pre>
+    <script>
+      /* A sibling host, to prove the Cookie rule does not spray this host's
+         jar at everything the page touches. SIBLING is resolved when the
+         request is served, by which point the port is known. */
+      fetch('${SIBLING}/leak', { mode: 'no-cors' }).catch(() => {});
+    </script>`);
+});
+
+await new Promise((resolve) => siteServer.listen(0, '127.0.0.1', resolve));
+const sitePort = siteServer.address().port;
+/** localhost and 127.0.0.1 are the same server but different hosts to Chrome. */
+const SITE = `http://localhost:${sitePort}`;
+const SIBLING = `http://127.0.0.1:${sitePort}`;
 
 const browser = await puppeteer.launch({
   executablePath: findChrome(),
@@ -1135,8 +1194,130 @@ try {
       Array.isArray(siteMemory['github.com']),
     JSON.stringify(siteMemory),
   );
+
+  // ------------------------------------------------------------ sign-in bridge --
+  /*
+   * Last, because it is the only section that needs a site it can sign into, and
+   * because leaving a bridge armed would put cookies into anything that followed.
+   *
+   * What this pins down is the part that is easy to break silently: the frame
+   * seeing the token it needs, the HttpOnly session staying out of page script,
+   * and one host's jar not reaching another.
+   */
+  {
+    // Sign in the way the reader would have, in an ordinary tab.
+    const signin = await browser.newPage();
+    await signin.goto(`${SITE}/signin`, { waitUntil: 'load' });
+    const jar = await signin.cookies(`${SITE}/`);
+    check(
+      'test site signs in as a normal tab',
+      jar.length === 2 && jar.some((c) => c.name === 'sid' && c.httpOnly),
+      jar.map((c) => `${c.name}${c.httpOnly ? ' (httpOnly)' : ''}`).join(', '),
+    );
+
+    /** The framed page, whichever frame is currently showing it. */
+    const framed = () =>
+      viewer.frames().find((f) => f.url().startsWith('http://localhost:'));
+    const inFramePage = async (fn, ...args) => {
+      const frame = framed();
+      return frame ? frame.evaluate(fn, ...args) : null;
+    };
+    const cookieInFrame = () => inFramePage(() => document.cookie);
+    const textInFrame = (id) =>
+      inFramePage((selector) => document.getElementById(selector)?.textContent, id);
+
+    await open(`device=iphone-15-pro&${site(`${SITE}/app`)}`);
+
+    /*
+     * Whether the *request* cookies reach a framed page is Chrome's call, not
+     * ours: an extension holding host permissions is not necessarily a third
+     * party for the request. Script access is what reliably goes, so that is
+     * what the bridge-off state asserts.
+     */
+    check(
+      'bridge off: the framed page cannot read its cookies from script',
+      (await cookieInFrame()) === '',
+      `document.cookie="${await cookieInFrame()}"`,
+    );
+
+    requests.length = 0;
+    await clickIn(viewer, '#sessionToggle');
+    // The toggle reloads the frame so the page re-reads the cookie it was denied.
+    await wait(6000);
+
+    const onCookie = await cookieInFrame();
+    const onHeader = await textInFrame('header');
+    const onState = await textInFrame('state');
+
+    check(
+      'bridge on: document.cookie sees the script-readable token',
+      /tok=SCRIPT-TOKEN/.test(onCookie ?? ''),
+      `document.cookie="${onCookie}"`,
+    );
+    check(
+      'bridge on: the HttpOnly session is kept out of page script',
+      !/sid=/.test(onCookie ?? ''),
+      `document.cookie="${onCookie}"`,
+    );
+    check(
+      'bridge on: the framed request carries the whole jar, HttpOnly included',
+      /sid=SERVER-SESSION/.test(onHeader ?? '') &&
+        /tok=SCRIPT-TOKEN/.test(onHeader ?? ''),
+      `header="${onHeader}", state=${onState}`,
+    );
+
+    // The rule is scoped to the framed host, so a sibling host the page talks to
+    // must not be handed this host's session.
+    const leaks = requests.filter((r) => r.url === '/leak');
+    check(
+      'bridge on: a sibling host is not sent this host cookies',
+      leaks.length > 0 && leaks.every((r) => !/sid=|tok=/.test(r.cookie)),
+      `${leaks.length} sibling request(s), cookies "${leaks.map((r) => r.cookie).join('|')}"`,
+    );
+
+    // A cookie the page sets through the shim has to reach the real jar, or a
+    // sign-in performed in the viewer would not outlive the tab.
+    await inFramePage(() => {
+      document.cookie = 'prefs=dark; Path=/; Max-Age=600';
+    });
+    await wait(1500);
+    const written = await signin.cookies(`${SITE}/`);
+    check(
+      'bridge on: a cookie set inside the frame reaches the real jar',
+      written.some((c) => c.name === 'prefs' && c.value === 'dark'),
+      written.map((c) => `${c.name}=${c.value}`).join(', '),
+    );
+
+    // And an expiry in the past is a deletion, not a write.
+    await inFramePage(() => {
+      document.cookie = 'prefs=dark; Path=/; Max-Age=0';
+    });
+    await wait(1500);
+    const deleted = await signin.cookies(`${SITE}/`);
+    check(
+      'bridge on: deleting a cookie inside the frame removes it from the real jar',
+      !deleted.some((c) => c.name === 'prefs'),
+      deleted.map((c) => `${c.name}=${c.value}`).join(', '),
+    );
+
+    await viewer.screenshot({ path: path.join(SHOTS, 'viewer-bridge.png') });
+
+    // Off again, and the frame is back to being denied.
+    await clickIn(viewer, '#sessionToggle');
+    await wait(1500);
+    await clickIn(viewer, '#reload');
+    await wait(6000);
+    check(
+      'bridge off again: script cookie access is denied once more',
+      (await cookieInFrame()) === '',
+      `document.cookie="${await cookieInFrame()}"`,
+    );
+
+    await signin.close();
+  }
 } finally {
   await browser.close();
+  siteServer.close();
   fs.rmSync(userDataDir, { recursive: true, force: true });
 }
 
